@@ -4,9 +4,6 @@ import numpy
 import geopandas
 import skimage
 
-import histology_features
-from histology_features.polygons.polygons import random_shapely_circles, get_labels_from_polygons, get_polygon_features
-
 def random_shapely_circles(
     image_shape, num_circles, min_radius=15, max_radius=35, seed=None, pixel_size=1
 ):

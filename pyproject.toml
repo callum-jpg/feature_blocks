@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta" 
+
+[project]
+name = "feature_blocks"
+version = "0.0"
+description = "Extract and cluster features from image blocks."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE.txt" }
+
+dependencies = [
+    "dask",
+    "scanpy",
+    "mahotas",
+    "numpy",
+    "matplotlib",
+    "scikit-image",
+    "scipy",
+    "geopanads", 
+    "shapely",
+    ]
+
+[project.optional-dependencies]
+dev = ["black", "isort", "ruff"]
+test = ["coverage"]
