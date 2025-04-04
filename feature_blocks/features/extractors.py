@@ -4,10 +4,10 @@ import dask.array
 import mahotas
 import numpy
 import skimage
-import torch
-import torchvision
-import torchvision.transforms as transforms
-import transformers
+# import torch
+# import torchvision
+# import torchvision.transforms as transforms
+# import transformers
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
@@ -101,8 +101,9 @@ def haralick_features(image: numpy.ndarray, error_value: int = 1):
 
 
 def vision_transformer_features(
-    image: torch.Tensor, model, transform, dict_result_key: str = "last_hidden_state"
+    image: "torch.Tensor", model, transform, dict_result_key: str = "last_hidden_state"
 ):
+    import torch
     """Apply a transformer model (assumed to be a HuggingFace transformer) to an
     image. **Returns the class embedding**"""
 
@@ -131,6 +132,8 @@ def transformer_features(image: numpy.ndarray, model, transforms_to_apply):
     The return array is peculiar when ran with dask, so must be post-processed
     using `postprocess_dask_transformer_features`
     """
+    import torch
+    import torchvision.transforms
     # Apply transformations
     if transforms_to_apply is not None:
         image = transforms_to_apply(image)
@@ -223,6 +226,8 @@ def expand_dims_by(array: numpy.ndarray, number_of_dims: int):
 
 
 def get_vit_mae_features(image):
+    import torch
+    import transformers
     if isinstance(image, dask.array.core.Array):
         image = image.compute()
 

@@ -6,7 +6,7 @@ import numpy
 import scanpy
 from sklearn.cluster import HDBSCAN, KMeans
 
-from ..utility.colormap import make_cmap
+from .utility import make_cmap
 
 
 def cluster_blocks(
