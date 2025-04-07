@@ -22,3 +22,7 @@ from .blocks import (
     threshold_skip_dask_blocks,
     array_homogeniser,
 )
+
+from .processor import (
+    get_vit_patch_features_and_clusters
+)

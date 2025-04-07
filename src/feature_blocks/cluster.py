@@ -83,8 +83,8 @@ def cluster_blocks(
             # Use GPU, if available
             import rapids_singlecell
 
-            print("Using GPU-accelerated clustering")
             rapids_singlecell.pp.neighbors(adata, use_rep="X")
+            print("Using GPU-accelerated clustering")
             rapids_singlecell.tl.leiden(adata, **kwargs)
             cluster_id = adata.obs.leiden.to_numpy().astype(int)
             rapids_singlecell.tl.umap(adata)
