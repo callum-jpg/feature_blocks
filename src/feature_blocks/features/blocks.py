@@ -8,6 +8,7 @@ import skimage
 from dask.diagnostics import ProgressBar
 
 from .classification import apply_pixel_classifier
+from feature_blocks.backend import run_dask_backend
 
 
 def feature_map_blocks(
@@ -241,26 +242,37 @@ def feature_map_overlap_blocks(
 
     delayed_image_blocks = overlapped_blocks.to_delayed().ravel()
 
-    with ProgressBar(minimum=1):
-        if mask is not None:
-            delayed_mask_blocks = overlapped_mask_blocks.to_delayed().ravel()
-            features = dask.compute(
-                [
-                    threshold_skip_dask_blocks(
-                        dask_block, mask_block, feature_extract_function, **kwargs
-                    )
-                    for (dask_block, mask_block) in zip(
-                        delayed_image_blocks,
-                        delayed_mask_blocks,
-                    )
-                ]
-            )[0]
-            features = array_homogeniser(features)
-        else:
-            features = dask.compute(
-                [feature_extract_function(x, **kwargs) for x in delayed_image_blocks]
-            )
+    if mask is not None:
+        delayed_mask_blocks = overlapped_mask_blocks.to_delayed().ravel()
+        fns = [
+                threshold_skip_dask_blocks(
+                    dask_block, mask_block, feature_extract_function, **kwargs
+                )
+                for (dask_block, mask_block) in zip(
+                    delayed_image_blocks,
+                    delayed_mask_blocks,
+                )
+            ]
+        print({type(f) for f in fns})
+        features = run_dask_backend(fns)[0]
+        # features = dask.compute(
+        #     [
+        #         threshold_skip_dask_blocks(
+        #             dask_block, mask_block, feature_extract_function, **kwargs
+        #         )
+        #         for (dask_block, mask_block) in zip(
+        #             delayed_image_blocks,
+        #             delayed_mask_blocks,
+        #         )
+        #     ]
+        # )[0]
+        features = array_homogeniser(features)
+    else:
+        features = dask.compute(
+            [feature_extract_function(x, **kwargs) for x in delayed_image_blocks]
+        )
 
+    print(111, features)
     features = numpy.array(features)
 
     features = features[numpy.newaxis]
@@ -490,16 +502,19 @@ def feature_blocks_to_anndata(
 
     return adata
 
-
+@dask.delayed()
 def threshold_skip_dask_blocks(
     dask_block, mask_block, feature_extract_fn: typing.Callable, **kwargs
 ):
     """If a dask block is composed of entirely value 0 pixels,
     skip feature extraction and just return an empty dask array"""
 
-    if mask_block.compute().max() == 0:
-        return numpy.empty(0)
-
+    if isinstance(mask_block, dask.array.Array):
+        if mask_block.compute().max() == 0:
+            return numpy.empty(0)
+    elif isinstance(mask_block, numpy.ndarray):
+        if mask_block.max() == 0:
+            return numpy.empty(0)
     return feature_extract_fn(dask_block, **kwargs)
 
 

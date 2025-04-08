@@ -84,11 +84,16 @@ def hog_features(
     return hist
 
 
-def haralick_features(image: numpy.ndarray, error_value: int = 1):
+def haralick_features(image: numpy.ndarray | dask.array.Array, error_value: int = 1):
     """Extract haralick features from an image.
 
     TODO: fix error encountered when an empty image (ie all 0s) is
     encountered"""
+
+    if isinstance(image, dask.array.Array):
+        print("COMPUTATION!!")
+        image = image.compute()
+
     try:
         features = mahotas.features.haralick(image).mean(axis=0)
         features = features.ravel()
