@@ -212,18 +212,27 @@ def feature_map_overlap_blocks(
     # Delayify the function
     feature_extract_function = dask.delayed()(feature_extract_function)
 
+
     if isinstance(image, numpy.ndarray):
         # Chunk the input image to the desired window size
         dask_image = dask.array.from_array(image, chunks=window_size)
-        if mask is not None:
-            # Masks are 2D, so skip the 2nd dimension, which is the channel
-            dask_mask = dask.array.from_array(mask, chunks=window_size[:2])
     elif isinstance(image, dask.array.Array):
-        dask_image = dask.array.rechunk(image, chunks=window_size)
-        if mask is not None:
-            dask_mask = dask.array.rechunk(mask, chunks=window_size[:2])
+        dask_image = image
     else:
         raise NotImplementedError(f"Image of type {type(image)} is not supported.")
+    
+    if mask is not None:
+        if isinstance(mask, numpy.ndarray):
+            # Masks are 2D, so skip the 2nd dimension, which is the channel
+            dask_mask = dask.array.from_array(mask, chunks=window_size[:2])
+        elif isinstance(mask, dask.array.Array):
+            dask_mask = mask
+        else:
+            raise NotImplementedError(f"Mask of type {type(image)} is not supported.")
+
+    dask_image = dask.array.rechunk(dask_image, chunks=window_size)
+    if mask is not None:
+        dask_mask = dask.array.rechunk(dask_mask, chunks=window_size[:2])
 
     # Rechunk so all overlapping windows fit in dask array blocks
     dask_image = overlap_rechunk(dask_image, overlap)
@@ -265,15 +274,12 @@ def feature_map_overlap_blocks(
         #         )
         #     ]
         # )[0]
-        print("features1", len(features), type(features))
         features = array_homogeniser(features)
-        print("features2", len(features), type(features))
     else:
         features = dask.compute(
             [feature_extract_function(x, **kwargs) for x in delayed_image_blocks]
         )
 
-    print(111, features)
     features = numpy.array(features)
 
     features = features[numpy.newaxis]
@@ -290,7 +296,6 @@ def feature_map_overlap_blocks(
         features = features.reshape((*dask_image.blocks.shape, features.shape[-1]))
 
     return features
-
 
 def multichannel_apply_fn(
     image: numpy.ndarray,
@@ -565,4 +570,4 @@ def array_homogeniser(feature_blocks: list) -> numpy.ndarray:
             # Remove any empty dimensions
             feature_blocks = [i.squeeze() for i in feature_blocks]
 
-    return numpy.array(feature_blocks)
+    return numpy.array(feature_blocks).astype(float)
