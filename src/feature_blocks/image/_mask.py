@@ -52,9 +52,7 @@ def tissue_detection(
     # Convert the image to HSV and extract the saturation channel
     hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
     saturation_channel = hsv_image[..., 1]
-
-    # Apply median blur
-    blurred_image = cv2.medianBlur(saturation_channel, ksize=blur_kernel)
+    value_channel = hsv_image[..., 2]
 
     # Choose thresholding method
     # If no manual threshold is requested, we will use Otsu
@@ -63,6 +61,14 @@ def tissue_detection(
     else:
         threshold_type = cv2.THRESH_BINARY + cv2.THRESH_OTSU
         manual_threshold = 0
+
+    # Mask the saturation channel based on the manual_threshold
+    # This can remove black regions (eg. from image padding) being erroneously
+    # included in the saturation image.
+    saturation_channel = numpy.where(value_channel > manual_threshold, saturation_channel, 0)
+
+    # Apply median blur
+    blurred_image = cv2.medianBlur(saturation_channel, ksize=blur_kernel)
 
     # Apply thresholding to create a binary mask
     _, mask = cv2.threshold(
