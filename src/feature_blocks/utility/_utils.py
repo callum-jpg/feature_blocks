@@ -6,6 +6,7 @@ def get_spatial_element(
     key: str | None = None,
     return_key: bool = False,
     as_spatial_image: bool = False,
+    image_scale: int = None
 ) -> SpatialElement | tuple[str, SpatialElement]:
     """Gets an element from a SpatialData object.
 
@@ -22,7 +23,7 @@ def get_spatial_element(
 
     if key is not None:
         assert key in element_dict, f"Spatial element '{key}' not found."
-        return _return_element(element_dict, key, return_key, as_spatial_image)
+        return _return_element(element_dict, key, return_key, as_spatial_image, image_scale)
 
     assert (
         len(element_dict) > 0
@@ -33,14 +34,17 @@ def get_spatial_element(
 
     key = next(iter(element_dict.keys()))
 
-    return _return_element(element_dict, key, return_key, as_spatial_image)
+    return _return_element(element_dict, key, return_key, as_spatial_image, image_scale)
+
 
 def _return_element(
-    element_dict: dict[str, SpatialElement], key: str, return_key: bool, as_spatial_image: bool
+    element_dict: dict[str, SpatialElement], key: str, return_key: bool, as_spatial_image: bool, image_scale: int
 ) -> SpatialElement | tuple[str, SpatialElement]:
     element = element_dict[key]
 
     if as_spatial_image and isinstance(element, DataTree):
-        element = next(iter(element["scale0"].values()))
+        if image_scale is None:
+            image_scale = 0
+        element = next(iter(element[f"scale{image_scale}"].values()))
 
     return (key, element) if return_key else element
