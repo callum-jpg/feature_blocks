@@ -253,8 +253,7 @@ def feature_map_overlap_blocks(
                     delayed_mask_blocks,
                 )
             ]
-        print({type(f) for f in fns})
-        features = run_dask_backend(fns)[0]
+        features = run_dask_backend(fns)
         # features = dask.compute(
         #     [
         #         threshold_skip_dask_blocks(
@@ -266,7 +265,9 @@ def feature_map_overlap_blocks(
         #         )
         #     ]
         # )[0]
+        print("features1", len(features), type(features))
         features = array_homogeniser(features)
+        print("features2", len(features), type(features))
     else:
         features = dask.compute(
             [feature_extract_function(x, **kwargs) for x in delayed_image_blocks]
@@ -539,10 +540,13 @@ def array_homogeniser(feature_blocks: list) -> numpy.ndarray:
     for block in feature_blocks:
         # Skip empty blocks, which have been masked out
         if block.size != 0:
-            # Check that a block does not have multiple feature vectors,
-            # as is the case for ViT features (patch and CLS features)
-            for feature_vector in block:
-                shapes.append(feature_vector.shape)
+            if isinstance(block, list):
+                # Check that a block does not have multiple feature vectors,
+                # as is the case for ViT features (patch and CLS features)
+                for feature_vector in block:
+                    shapes.append(feature_vector.shape)
+            else:
+                shapes.append(block.shape)
 
     # key in set to preserve order
     # Relevant if a block has two feature vectors and
@@ -558,5 +562,7 @@ def array_homogeniser(feature_blocks: list) -> numpy.ndarray:
             feature_blocks[block_idx] = numpy.array(
                 [numpy.zeros(i) for i in shapes], dtype="object"
             )
+            # Remove any empty dimensions
+            feature_blocks = [i.squeeze() for i in feature_blocks]
 
-    return feature_blocks
+    return numpy.array(feature_blocks)
