@@ -14,15 +14,16 @@ def assign_cell_cluster_block(
     original_shape = (original_image.y.shape[0], original_image.x.shape[0])
 
     adata = get_spatial_element(getattr(sdata, "tables"), "table")
-
+    
     centroids = adata.obsm["spatial"]
+
     centroids = scale_coords(
         xy = centroids,
         original_shape = original_shape,
-        new_shape = cluster_blocks.shape
+        new_shape = cluster_blocks.squeeze().shape # TODO: make cluster_blocks have a standardised size
         )
     
-    cluster_block_id = clustered_blocks[centroids[:, 1], centroids[:, 0]]
+    cluster_block_id = cluster_blocks[centroids[:, 1], centroids[:, 0]]
 
     adata.obs["cluster_block_id"] = cluster_block_id
 
