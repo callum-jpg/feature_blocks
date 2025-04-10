@@ -571,3 +571,14 @@ def array_homogeniser(feature_blocks: list) -> numpy.ndarray:
             feature_blocks = [i.squeeze() for i in feature_blocks]
 
     return numpy.array(feature_blocks).astype(float)
+
+def scale_similarly(multiscale_feature_blocks: list, order: int = 0) -> list:
+    """Scale all feature blocks to be equal to the largest"""
+    max_shape = max([i.shape for i in multiscale_feature_blocks])
+
+    multiscale_feature_blocks = [
+        skimage.transform.resize(i, output_shape=max_shape, order=order)
+        for i in multiscale_feature_blocks
+    ]
+
+    return multiscale_feature_blocks

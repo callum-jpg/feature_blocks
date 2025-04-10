@@ -21,6 +21,7 @@ from .blocks import (
     feature_blocks_to_anndata,
     threshold_skip_dask_blocks,
     array_homogeniser,
+    scale_similarly,
 )
 
 from .processor import (
