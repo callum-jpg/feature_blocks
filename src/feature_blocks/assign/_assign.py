@@ -23,7 +23,7 @@ def assign_cell_cluster_block(
         new_shape = cluster_blocks.squeeze().shape # TODO: make cluster_blocks have a standardised size
         )
     
-    cluster_block_id = cluster_blocks[centroids[:, 1], centroids[:, 0]]
+    cluster_block_id = cluster_blocks[centroids[:, 1], centroids[:, 0]].astype(int)
 
     adata.obs["cluster_block_id"] = cluster_block_id
 
