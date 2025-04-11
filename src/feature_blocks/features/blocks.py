@@ -195,6 +195,9 @@ def feature_map_overlap_blocks(
 
     if len(overlap) != image.ndim:
         overlap = overlap * image.ndim
+        if image.ndim == 3 and image.shape[-1] == 3:
+            # Image is RGB, so no overlap in the 0th dimension
+            overlap[-1] = 0
 
     for i, (ovrlp, dim) in enumerate(zip(overlap, window_size)):
         if ovrlp < 0 or ovrlp >= 1:
@@ -560,7 +563,7 @@ def array_homogeniser(feature_blocks: list) -> numpy.ndarray:
 
     # Now set the empty features
     for block_idx, block in enumerate(feature_blocks):
-        if len(block) == 0:
+        if len(block) == 0 or isinstance(block, float):
             # At an empty feature block, set the feature vector
             # to be a zero array of the same shape as the other
             # foreground feature vectors
@@ -570,7 +573,7 @@ def array_homogeniser(feature_blocks: list) -> numpy.ndarray:
             # Remove any empty dimensions
             feature_blocks = [i.squeeze() for i in feature_blocks]
 
-    return numpy.array(feature_blocks).astype(float)
+    return numpy.array(feature_blocks)
 
 def scale_similarly(multiscale_feature_blocks: list, order: int = 0) -> list:
     """Scale all feature blocks to be equal to the largest"""
