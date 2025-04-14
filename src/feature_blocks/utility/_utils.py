@@ -1,5 +1,6 @@
 from spatialdata.models import SpatialElement
 from xarray import DataArray, DataTree
+import numpy
 
 def get_spatial_element(
     element_dict: dict[str, SpatialElement],
@@ -48,3 +49,14 @@ def _return_element(
         element = next(iter(element[f"scale{image_scale}"].values()))
 
     return (key, element) if return_key else element
+
+
+def normalise_rgb(image, mean, std):
+    assert image.shape[-1] == 3, "Expected RGB image, with C in -1th dimension."
+    # Convert image to float32 to ensure precision during calculations
+    image = image.astype(numpy.float32)
+    # Normalize each channel separately
+    for i in range(3):  # assuming RGB channels
+        image[:, :, i] = (image[:, :, i] - mean[i]) / std[i]
+
+    return image
