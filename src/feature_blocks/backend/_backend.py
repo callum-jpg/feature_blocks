@@ -19,14 +19,19 @@ def get_n_workers():
 
 
 def run_dask_backend(functions: list[Callable]):
-    n_workers = get_n_workers()
-    
-    if len(functions) < n_workers:
-        n_workers = len(functions)
+    try:
+        from dask_cuda import LocalCUDACluster
+        n_workers = LocalCUDACluster()
+        log.info(f"Using CUDA cluster")
+    except:
+        n_workers = get_n_workers()
 
-    log.info(f"Using Dask backend with {n_workers} workers.")
+        if len(functions) < n_workers:
+            n_workers = len(functions)
 
-    with Client(n_workers=n_workers) as client:
+        log.info(f"Using Dask backend with {n_workers} workers.")
+
+    with Client(n_workers) as client:
         if not all([isinstance(fn, Delayed) for fn in functions]):
             functions = [dask.delayed(fn)() for fn in functions]
 
