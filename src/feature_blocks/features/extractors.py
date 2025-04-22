@@ -154,11 +154,14 @@ def transformer_features(image: numpy.ndarray, model, transforms_to_apply):
 
     image = image.to(device)
     model.to(device)
+    
+    model.eval()
 
     # Add batch dimension
     image = image.unsqueeze(0)
 
-    output = model(image)
+    with torch.no_grad():
+        output = model(image)
 
     # Get the patch features
     patch_features = output.last_hidden_state[:, 1:, :].squeeze().cpu().detach().numpy()
@@ -169,7 +172,8 @@ def transformer_features(image: numpy.ndarray, model, transforms_to_apply):
     # Get the whole image features
     image_features = output.last_hidden_state[:, 0, :].squeeze().cpu().detach().numpy()
 
-    return numpy.array([patch_features, image_features], dtype="object")
+    # return numpy.array([patch_features, image_features], dtype="object")
+    return image_features.astype(numpy.float16)
 
 
 def postprocess_dask_transformer_features(transformer_features: numpy.ndarray):
