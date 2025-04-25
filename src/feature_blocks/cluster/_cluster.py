@@ -8,14 +8,14 @@ from sklearn.cluster import HDBSCAN, KMeans
 
 from feature_blocks.utility import make_cmap
 
+import einops
+
+
 
 def cluster_blocks(
     feature_blocks: numpy.array,
     cluster_method: typing.Literal["kmeans", "hdbscan", "leiden"],
-    mask: numpy.array = None,
-    masked_value: float = numpy.nan,
     return_adata: bool = False,
-    volumetric: bool = False,
     **kwargs,
 ):
     """
@@ -23,62 +23,29 @@ def cluster_blocks(
     an array with shape (x_dims, y_dims, feature_vector)
     """
 
-    if not volumetric and feature_blocks.ndim == 4:
-        raise ValueError(
-            f"Got a feature block image with ndim {feature_blocks.ndim} suggesting a 3D feature map but volumetric is {volumetric}."
-        )
+    volumetric = True if feature_blocks.shape[1] > 1 else False
 
-    if volumetric and not feature_blocks.ndim == 4:
-        raise ValueError(
-            f"Got volumetric = {volumetric} but feature blocks is not 3D and instead has {feature_blocks.ndim} dims (expected 4)"
-        )
+    # Define the linearised block shapes (n_features, YXZ)
+    linear_shape = (
+        feature_blocks.shape[0], feature_blocks.shape[1] * feature_blocks.shape[2] * feature_blocks.shape[3]
+    )
 
-    if volumetric:
-        # If volumetric, the 0th dimension contains the z-planes
-        target_shape = (
-            feature_blocks.shape[0] * feature_blocks.shape[1] * feature_blocks.shape[2],
-            feature_blocks.shape[-1],
-        )
-    else:
-        # Target shape is (n_blocks, features)
-        target_shape = (
-            feature_blocks.shape[0] * feature_blocks.shape[1],
-            feature_blocks.shape[-1],
-        )
+    # Reshape to array of (num_features_per_block, num_blocks)
+    reshaped_features = einops.rearrange(feature_blocks, "C Z H W -> C (Z H W)")
 
-    # Reshape to array of (num_blocks, num_features_per_block)
-    reshaped_features = numpy.reshape(feature_blocks, target_shape)
+    # Find where feature_blocks is NaN, which represents background
+    mask = numpy.any(numpy.isnan(reshaped_features), axis=0)
 
-    if mask is not None:
-        assert mask.dtype == bool, "Mask must be boolean"
-        # Reshape the mask to the same format as reshaped_features, but without
-        # the feature vector
-        if volumetric:
-            reshaped_mask = numpy.reshape(
-                mask,
-                (
-                    feature_blocks.shape[0]
-                    * feature_blocks.shape[1]
-                    * feature_blocks.shape[2],
-                    1,
-                ),
-            )
-        else:
-            reshaped_mask = numpy.reshape(
-                mask, (feature_blocks.shape[0] * feature_blocks.shape[1], 1)
-            )
-        # Define indices that are not masked
-        idx_to_cluster = numpy.where(reshaped_mask)[0]
-    else:
-        # No mask provided, so all blocks will be clustered
-        idx_to_cluster = numpy.arange(0, reshaped_features.shape[0])
+    # Invert the mask to get foreground only indices
+    idx_to_cluster = numpy.where(~mask)[0]
 
     if cluster_method.casefold() == "kmeans":
-        cluster_id = KMeans(**kwargs).fit_predict(reshaped_features[idx_to_cluster])
+        cluster_id = KMeans(**kwargs).fit_predict(reshaped_features[:, idx_to_cluster])
     elif cluster_method.casefold() == "hdbscan":
-        cluster_id = HDBSCAN(**kwargs).fit_predict(reshaped_features[idx_to_cluster])
+        cluster_id = HDBSCAN(**kwargs).fit_predict(reshaped_features[:, idx_to_cluster])
     elif cluster_method.casefold() == "leiden":
-        adata = anndata.AnnData(reshaped_features)[idx_to_cluster]
+        # Tranpose the reshaped_features into (block, feature) shape
+        adata = anndata.AnnData(reshaped_features[:, idx_to_cluster].T)
         try:
             # Use GPU, if available
             import rapids_singlecell
@@ -116,27 +83,13 @@ def cluster_blocks(
     else:
         raise NotImplementedError
 
-    output_features = numpy.zeros((target_shape[0], 1))
-    output_features[idx_to_cluster] = cluster_id[..., numpy.newaxis]
+    output_features = numpy.zeros((1, linear_shape[1]))
+    output_features[:, idx_to_cluster] = cluster_id
 
-    if mask is not None:
-        inverted_idx = numpy.setdiff1d(range(output_features.shape[0]), idx_to_cluster)
-        output_features[inverted_idx] = masked_value
+    inverted_idx = numpy.setdiff1d(range(output_features.shape[1]), idx_to_cluster)
+    output_features[:, inverted_idx] = numpy.nan
 
-    if volumetric:
-        output_features = numpy.reshape(
-            output_features,
-            (
-                feature_blocks.shape[0],
-                feature_blocks.shape[1],
-                feature_blocks.shape[2],
-                1,
-            ),
-        )
-    else:
-        output_features = numpy.reshape(
-            output_features, (feature_blocks.shape[0], feature_blocks.shape[1], 1)
-        )
+    output_features = einops.rearrange(output_features, "C (Z H W) -> C Z H W", Z=feature_blocks.shape[1], H=feature_blocks.shape[2], W=feature_blocks.shape[3])
 
     if return_adata:
         return output_features, adata
