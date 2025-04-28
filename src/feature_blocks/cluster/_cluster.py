@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy
 import scanpy
 from sklearn.cluster import HDBSCAN, KMeans
+from sklearn.decomposition import PCA
 
 from feature_blocks.utility import make_cmap
 
@@ -23,8 +24,6 @@ def cluster_blocks(
     an array with shape (x_dims, y_dims, feature_vector)
     """
 
-    volumetric = True if feature_blocks.shape[1] > 1 else False
-
     # Define the linearised block shapes (n_features, YXZ)
     linear_shape = (
         feature_blocks.shape[0], feature_blocks.shape[1] * feature_blocks.shape[2] * feature_blocks.shape[3]
@@ -32,6 +31,19 @@ def cluster_blocks(
 
     # Reshape to array of (num_features_per_block, num_blocks)
     reshaped_features = einops.rearrange(feature_blocks, "C Z H W -> C (Z H W)")
+
+    # pca_proj_ch = 5
+
+    # pca = PCA(pca_proj_ch)
+
+    # reshaped_features = nan_drop_fn(
+    #     reshaped_features.T,
+    #     pca.fit_transform,
+    #     pca_proj_ch,
+    # ).T
+
+
+    reshaped_features = reshaped_features / numpy.linalg.norm(reshaped_features, axis=0, keepdims=True)
 
     # Find where feature_blocks is NaN, which represents background
     mask = numpy.any(numpy.isnan(reshaped_features), axis=0)
@@ -97,6 +109,30 @@ def cluster_blocks(
         return output_features, cmap
     else:
         return output_features
+
+def nan_drop_fn(array, fn, output_feature_size):
+    """Apply a function to an array that has the form 
+    (n_samples, n_features). If n_samples contains NaN values, these
+    will not be passed to the function.
+    """
+    # Find where a row si composed of only nan
+    mask = numpy.any(numpy.isnan(array), axis=1)
+
+    # Get the indices for where there is not a nan
+    valid_mask = numpy.where(~mask)[0]
+
+    # Subset
+    no_nan_array = array[valid_mask]
+
+    # Apply function to non-nan subset
+    output = fn(no_nan_array)
+
+    # Create an array of NaN values based on n_samples and output_feature_size
+    output_features = numpy.full((array.shape[0], output_feature_size), numpy.nan)
+    # Fill in the features for the non NaN values. 
+    output_features[valid_mask] = output
+
+    return output_features
 
 
 def cluster_batch_blocks(
