@@ -9,7 +9,6 @@ description = "Extract and cluster features from image blocks."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE.txt" }
-
 dependencies = [
     "dask",
     "scanpy",
@@ -21,6 +20,9 @@ dependencies = [
     "geopanads", 
     "shapely",
     ]
+
+[project.scripts]
+feature_blocks = "feature_blocks.main:app"
 
 [project.optional-dependencies]
 dev = ["black", "isort", "ruff"]
