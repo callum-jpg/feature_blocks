@@ -11,18 +11,40 @@ requires-python = ">=3.8"
 license = { file = "LICENSE.txt" }
 dependencies = [
     "dask",
-    "scanpy",
-    "mahotas",
+    "dask_image",
+    "dask_jobqueue",
+    "distributed",
+    "typer",
     "numpy",
-    "matplotlib",
     "scikit-image",
-    "scipy",
-    "geopanads", 
+    "torch",
+    "torchvision",
+    "transformers",
+    "timm",
+    "einops",
+    "opencv-python",
     "shapely",
+    "zarr",
+    "spatial_image",
+    "bokeh",
+
     ]
 
 [project.scripts]
 feature_blocks = "feature_blocks.main:app"
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu" },
+]
+torchvision = [
+  { index = "pytorch-cpu" },
+]
 
 [project.optional-dependencies]
 dev = ["black", "isort", "ruff"]
