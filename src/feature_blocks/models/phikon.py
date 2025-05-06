@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from transformers import AutoImageProcessor, AutoModel
-import copy
 import gc
 
 
@@ -28,10 +27,6 @@ class PhikonV2(nn.Module):
         x = processor(x, return_tensors="pt")
 
         with torch.no_grad():
-            # features = copy.deepcopy(
-                
-            # )
-
             features = model(**x).last_hidden_state[:, 0, :]
 
         features = features.reshape(self.output_shape)

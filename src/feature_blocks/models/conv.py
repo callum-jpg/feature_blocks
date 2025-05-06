@@ -56,11 +56,11 @@ class ConvFeatures(nn.Module):
         self.n_features = 42
         self.output_shape = (self.n_features, 1, 1, 1)  # (C, Z, H, W)
 
-        # Define the model
-        self.model = ConvNet(n_channels, self.n_features)
-        self.model.eval()
-
     def forward(self, x):
+        # Define the model
+        model = ConvNet(n_channels, self.n_features)
+        model.eval()
+
         with torch.no_grad():
             x = x[:, 0, ...]  # Drop the Z-dim
             # Convert to tensor
@@ -68,7 +68,7 @@ class ConvFeatures(nn.Module):
             # Add a batch dim
             x = x.unsqueeze(0).to(torch.float)
 
-            features = self.model(x)
+            features = model(x)
             # Model outputs cannot be easily garbage collected,
             # so we create copy that can.
             # features = deepcopy(features)
