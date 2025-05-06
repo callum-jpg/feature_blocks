@@ -36,7 +36,7 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
             # account="callum",
             n_workers=200,
             cores=1,
-            memory="4GB",
+            memory="16GB",
             walltime="01:00:00",
             log_directory="logs",
             python="singularity exec --env PATH=/homes/callum/.local/lib/python3.11/site-packages:$PATH /nfs/research/uhlmann/callum/dockerfiles/histology_features/histology_features.simg python"
