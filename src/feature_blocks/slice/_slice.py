@@ -59,10 +59,15 @@ def filter_slices_by_mask(
     Returns:
     - A list of slice tuples where mask_array[slc] == 1 for all elements.
     """
-    foreground = [slc for slc in slices if np.any(mask_array[slc] > 0)]
-
-    background = [slc for slc in slices if slc not in foreground]
-
+    foreground = []
+    background = []
+    
+    for slc in slices:
+        if np.any(mask_array[slc] > 0):
+            foreground.append(slc)
+        else:
+            background.append(slc)
+    
     return foreground, background
 
 
