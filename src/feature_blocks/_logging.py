@@ -31,7 +31,8 @@ class ColorFormatter(logging.Formatter):
 
 
 def configure_logger(log: logging.Logger):
-    log.setLevel(logging.INFO)
+    # log.setLevel(logging.INFO)
+    log.setLevel(logging.DEBUG)
 
     consoleHandler = logging.StreamHandler()
     consoleHandler.setFormatter(ColorFormatter())

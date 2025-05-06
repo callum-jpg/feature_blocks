@@ -52,15 +52,11 @@ def extract(
         )
 
         # Create a dask graph for zarr saving
-        tasks = image.to_zarr(
+        image.to_zarr(
             input_path,
             compute=False,
             overwrite=True,
-        )
-
-        print(tasks, image.shape, image)
-        
-        run_dask_backend([tasks])
+        ).compute()
 
     _extract(
         zarr_path=input_path,

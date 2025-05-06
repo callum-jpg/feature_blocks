@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Callable
 
-from dask.distributed import Client, LocalCluster, progress, performance_report
+from dask.distributed import Client, LocalCluster, progress, performance_report, wait
 from distributed.utils import silence_logging_cmgr
 
 import dask
@@ -25,42 +25,37 @@ def get_n_workers():
 
 
 def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
-    # if not in_slurm():  # Temp block
-    #     from dask_jobqueue import SLURMCluster
+    if in_slurm():  # Temp block
+        from dask_jobqueue import SLURMCluster
 
-    #     log.info("Using SLURM cluster")
-    #     print("Using SLURM cluster")
+        log.info("Using SLURM cluster")
+        print("Using SLURM cluster")
 
-    #     # import tomllib
-    #     # config = tomllib.load(open("/nfs/research/uhlmann/callum/zarr_backed_dask_compute/zarr_back/config/slurm_config.toml", "rb"))
-    #     # dask.config.update(config)
+        cluster = SLURMCluster(
+            # queue='research',
+            # account="callum",
+            n_workers=200,
+            cores=1,
+            memory="4GB",
+            walltime="01:00:00",
+            log_directory="logs",
+            python="singularity exec --env PATH=/homes/callum/.local/lib/python3.11/site-packages:$PATH /nfs/research/uhlmann/callum/dockerfiles/histology_features/histology_features.simg python"
+        )
+    else:
+        try:
+            from dask_cuda import LocalCUDACluster
 
-    #     cluster = SLURMCluster(
-    #         # queue='research',
-    #         # account="callum",
-    #         cores=4,
-    #         processes=1,
-    #         memory="12GB",
-    #         walltime="01:00:00",
-    #         # python="singularity run /nfs/research/uhlmann/callum/dockerfiles/histology_features/histology_features.simg python"
-    #     )
-    #     cluster.scale(20)
-    # else:
-    try:
-        from dask_cuda import LocalCUDACluster
+            cluster = LocalCUDACluster()
+            log.info("Using CUDA cluster")
+        except:
+            n_workers = get_n_workers()
+            cluster = LocalCluster(n_workers=n_workers)
+            log.info("Using CPU cluster")
 
-        cluster = LocalCUDACluster()
-        log.info("Using CUDA cluster")
-    except:
-        n_workers = get_n_workers()
-        # n_workers = 6
-        cluster = LocalCluster(n_workers=n_workers)
-        log.info("Using CPU cluster")
+            if len(functions) < n_workers:
+                n_workers = len(functions)
 
-        if len(functions) < n_workers:
-            n_workers = len(functions)
-
-        log.info(f"Using {n_workers} n_workers")
+            log.info(f"Using {n_workers} n_workers")
 
     if visualise_graph:
         dask.visualize(*functions, filename="dask-task-graph", format="svg", optimize_graph=True, color="order")

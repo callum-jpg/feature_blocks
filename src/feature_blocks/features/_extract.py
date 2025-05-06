@@ -2,8 +2,8 @@ import dask.array
 import skimage
 from feature_blocks.models import available_models
 from feature_blocks.image import tissue_detection
-from feature_blocks.task import create_task
-from feature_blocks.slice import generate_slices, filter_slices_by_mask
+from feature_blocks.task import create_task, read, infer, write
+from feature_blocks.slice import generate_slices, filter_slices_by_mask, normalize_slices
 from feature_blocks.backend import run_dask_backend
 import logging
 import numpy
@@ -12,6 +12,7 @@ import functools
 from tqdm import tqdm
 import typing
 import math
+import multiprocessing
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +81,9 @@ def extract(
     )  # (C, Z, Y, X)
 
     # Prepare output zarr file
+    # Optional parallel writing (I don't think we need this 
+    # since there are no block overlaps/conflicts): 
+    # https://zarr.readthedocs.io/en/v1.1.0/tutorial.html#parallel-computing-and-synchronization
     new_zarr = zarr.create(
         shape=output_shape,
         chunks=output_chunks,
@@ -89,23 +93,62 @@ def extract(
         fill_value=numpy.nan,  # Value to use for empty chunks
     )
 
-    create_task_fn = functools.partial(
-        create_task,
-        input_data=input_data,
-        new_zarr=new_zarr,
-        chunk_size=block_size // output_chunks[2],
-        feature_extract_fn=feature_extract_fn,
-    )
+    # create_task_fn = functools.partial(
+    #     create_task,
+    #     input_data=input_data,
+    #     new_zarr=new_zarr,
+    #     chunk_size=block_size // output_chunks[2],
+    #     feature_extract_fn=feature_extract_fn,
+    # )
+
+    # input_data = dask.delayed(input_data)
 
     # Create tasks. This is a list of delayed jobs to be run on the dask
     # backend
     tasks = []
+
+    def update_region(region, block_size, feature_extract_fn):
+        # Since we are 
+        chunk_size = block_size // feature_extract_fn.output_shape[2]
+
+        # Construct the new region        
+        new_region = [
+            slice(0, feature_extract_fn.n_features, None),
+            slice(0, 1, None),
+        ]  # Set the C and Z slices
+
+        output_chunks = feature_extract_fn.output_shape
+
+    # args = args_list = [(input_data, reg, block_size, feature_extract_fn, new_zarr) for reg in regions]
+
+    # with multiprocessing.Pool() as pool:
+    #     tasks = pool.starmap(create_task, tqdm(args, total=len(regions)))
+
+    import time
     for reg in tqdm(regions, total=len(regions)):
-        tasks.append(create_task_fn(reg))
+        start_time = time.time()
+        delayed_chunk = read(input_data, reg)
+        # print(1, time.time() - start_time)
+
+        # delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, run_phikon)
+        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, feature_extract_fn)
+        # print(2, time.time() - start_time)
+
+        new_region = [
+            slice(0, feature_extract_fn.n_features, None),
+            slice(0, 1, None),
+        ]  # Set the C and Z slices
+        chunk_size = block_size // output_chunks[2]
+        new_region.extend(normalize_slices(reg[-2:]
+        , chunk_size))  # Reduce the YX slices
+        # print(3, time.time() - start_time)
+
+        delayed_write = dask.delayed(write)(new_zarr, delayed_result, new_region)
+        # print(4, time.time() - start_time)
+
+        tasks.append(delayed_write)
 
     run_dask_backend(tasks)
-
-
 
 def _get_model(model: typing.Callable | str) -> "torch.nn.Module":
     if isinstance(model, str):
@@ -116,3 +159,20 @@ def _get_model(model: typing.Callable | str) -> "torch.nn.Module":
         return available_models[model]()
 
     return model
+
+def create_task(input_data, region, block_size, feature_extract_fn, new_zarr):
+    delayed_chunk = read(input_data, region)
+
+    delayed_result = dask.delayed(infer)(delayed_chunk, feature_extract_fn)
+
+    new_region = [
+        slice(0, feature_extract_fn.n_features, None),
+        slice(0, 1, None),
+    ]  # Set the C and Z slices
+    chunk_size = block_size // feature_extract_fn.output_shape[2]
+    new_region.extend(normalize_slices(region[-2:]
+    , chunk_size))  # Reduce the YX slices
+
+    delayed_write = dask.delayed(write)(new_zarr, delayed_result, new_region)
+
+    return delayed_write

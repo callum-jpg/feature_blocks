@@ -7,7 +7,7 @@ name = "feature_blocks"
 version = "0.0"
 description = "Extract and cluster features from image blocks."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = { file = "LICENSE.txt" }
 dependencies = [
     "dask",
@@ -24,10 +24,11 @@ dependencies = [
     "einops",
     "opencv-python",
     "shapely",
-    "zarr",
+    "zarr==2.18.7",
     "spatial_image",
     "bokeh",
-
+    "matplotlib",
+    "ipycytoscape",
     ]
 
 [project.scripts]
