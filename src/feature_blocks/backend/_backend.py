@@ -32,12 +32,11 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
         print("Using SLURM cluster")
 
         cluster = SLURMCluster(
-            # queue='research',
-            # account="callum",
-            n_workers=200,
+            # n_workers=200,
+            n_workers=400,
             cores=1,
             memory="16GB",
-            walltime="01:00:00",
+            walltime="03:00:00",
             log_directory="logs",
             python="singularity exec --env PATH=/homes/callum/.local/lib/python3.11/site-packages:$PATH /nfs/research/uhlmann/callum/dockerfiles/histology_features/histology_features.simg python"
         )
@@ -63,7 +62,7 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
     client = Client(cluster, asynchronous=False)
 
     with performance_report(filename = "performance_report.html"):
-        futures = dask.compute(functions)
+        futures = client.compute(functions)
         progress(futures, notebook=False)
 
     # Silence cluster shutdown
