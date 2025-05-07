@@ -13,6 +13,7 @@ from tqdm import tqdm
 import typing
 import math
 import multiprocessing
+import time
 
 log = logging.getLogger(__name__)
 
@@ -124,15 +125,13 @@ def extract(
     # with multiprocessing.Pool() as pool:
     #     tasks = pool.starmap(create_task, tqdm(args, total=len(regions)))
 
-    import time
+    
     for reg in tqdm(regions, total=len(regions)):
         start_time = time.time()
         delayed_chunk = read(input_data, reg)
-        # print(1, time.time() - start_time)
 
         # delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, run_phikon)
         delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, feature_extract_fn)
-        # print(2, time.time() - start_time)
 
         new_region = [
             slice(0, feature_extract_fn.n_features, None),
@@ -141,14 +140,14 @@ def extract(
         chunk_size = block_size // output_chunks[2]
         new_region.extend(normalize_slices(reg[-2:]
         , chunk_size))  # Reduce the YX slices
-        # print(3, time.time() - start_time)
 
         delayed_write = dask.delayed(write)(new_zarr, delayed_result, new_region)
-        # print(4, time.time() - start_time)
 
         tasks.append(delayed_write)
 
+    start_time = time.time()
     run_dask_backend(tasks)
+    log.info(f"Analysis time: {time.time() - start_time}")
 
 def _get_model(model: typing.Callable | str) -> "torch.nn.Module":
     if isinstance(model, str):
