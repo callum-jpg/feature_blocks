@@ -14,6 +14,7 @@ import typing
 import math
 import multiprocessing
 import time
+from datetime import timedelta
 
 log = logging.getLogger(__name__)
 
@@ -147,7 +148,8 @@ def extract(
 
     start_time = time.time()
     run_dask_backend(tasks)
-    log.info(f"Analysis time: {time.time() - start_time}")
+    elapsed = time.time() - start_time
+    log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
 
 def _get_model(model: typing.Callable | str) -> "torch.nn.Module":
     if isinstance(model, str):
