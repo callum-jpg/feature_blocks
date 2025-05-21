@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 
 def in_slurm():
-    return "slurm" in os.environ["HOSTNAME"]
+    return "SLURM_JOB_ID" in os.environ
 
 
 def get_n_workers():
