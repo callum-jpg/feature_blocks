@@ -20,6 +20,9 @@ app = typer.Typer()
 def extract(
     config_file: str
 ):
+    """
+    Perform feature block extraction from an image file.
+    """
     with open(config_file, "rb") as f:
         config = tomllib.load(f)
 
@@ -31,6 +34,7 @@ def extract(
         # Load image
         image = imread(input_path)
 
+        # Standarise the image to CZYX
         image, dimension_order = standardise_image(image, config["image_dimension_order"])
         
         # Update the input_path to now reflect the zarr store
@@ -38,8 +42,7 @@ def extract(
 
         log.info(f"Saving image as chunked zarr to: {input_path}")
 
-        # Convert to a spatial_image
-        # TODO: Utilize spatial_image features more
+        # Convert to a spatial_image for intuitive dimensions
         image = (
             to_spatial_image(
                 image, 
@@ -68,6 +71,7 @@ def extract(
         )
 
         # Create a dask graph for zarr saving
+        # TODO: Would distributed write improve speed?
         image.to_zarr(
             input_path,
             compute=False,
@@ -89,6 +93,9 @@ def extract(
 def cluster(
     config_file: str
 ):
+    """
+    Cluster embeddings from a zarr store.
+    """
     pass
 
 
