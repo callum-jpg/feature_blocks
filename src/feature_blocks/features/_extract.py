@@ -42,8 +42,9 @@ def extract(
     regions = generate_slices(input_data.shape, block_size, [2, 3])
 
     if calculate_mask:
+            log.info(f"Calculating mask...")
             mask = tissue_detection(
-                input_data[:, 0, ::image_downsample, ::image_downsample].compute().transpose(1, 2, 0) # Downsample 8x and convert to YXC
+                input_data[:, 0, ::image_downsample, ::image_downsample].compute().transpose(1, 2, 0)
             )
             # Mask has shape (Y, X). Resize this to the input image
             mask = skimage.transform.resize(
@@ -53,9 +54,9 @@ def extract(
             )
             mask = mask[numpy.newaxis, numpy.newaxis] # Add C an Z dimensions back
 
-            log.info(f"Before masking: {len(regions)}")
+            log.info(f"Before masking there was {len(regions)} possible regions")
             regions, _background_slices = filter_slices_by_mask(regions, mask)
-            log.info(f"After masking: {len(regions)}")
+            log.info(f"After masking there was {len(regions)} regions that were inside the mask.")
 
             assert (
                 len(regions) > 0
@@ -126,12 +127,11 @@ def extract(
     # with multiprocessing.Pool() as pool:
     #     tasks = pool.starmap(create_task, tqdm(args, total=len(regions)))
 
-    
+    log.info(f"Creating delayed functions...")
     for reg in tqdm(regions, total=len(regions)):
         start_time = time.time()
         delayed_chunk = read(input_data, reg)
 
-        # delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, run_phikon)
         delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, feature_extract_fn)
 
         new_region = [
