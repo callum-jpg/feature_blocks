@@ -65,6 +65,25 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
         futures = client.compute(functions)
         progress(futures, notebook=False)
 
+    # Process results with timeout
+    completed_count = 0
+    failed_indices = []
+    
+    for i, future in enumerate(as_completed(futures, timeout=600 * len(functions))):
+        try:
+            # Get result with individual timeout
+            result = future.result(timeout=600)
+            
+            completed_count += 1
+            if completed_count % 100 == 0:  # Progress update every 100 functions
+                print(f"Completed {completed_count}/{len(functions)} tasks")
+                
+        except Exception as e:
+            print(f"Task {i} failed: {e}")
+            failed_indices.append(i)
+    
+    print(f"Completed: {completed_count}, Failed: {len(failed_indices)}")
+
     # Silence cluster shutdown
     with silence_logging_cmgr(logging.CRITICAL):
         client.cancel(futures)
