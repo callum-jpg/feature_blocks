@@ -56,7 +56,7 @@ def extract(
 
             log.info(f"Before masking there was {len(regions)} possible regions")
             regions, _background_slices = filter_slices_by_mask(regions, mask)
-            log.info(f"After masking there was {len(regions)} regions that were inside the mask.")
+            log.info(f"After masking there were {len(regions)} regions inside the mask")
 
             assert (
                 len(regions) > 0
@@ -96,16 +96,6 @@ def extract(
         fill_value=numpy.nan,  # Value to use for empty chunks
     )
 
-    # create_task_fn = functools.partial(
-    #     create_task,
-    #     input_data=input_data,
-    #     new_zarr=new_zarr,
-    #     chunk_size=block_size // output_chunks[2],
-    #     feature_extract_fn=feature_extract_fn,
-    # )
-
-    # input_data = dask.delayed(input_data)
-
     # Create tasks. This is a list of delayed jobs to be run on the dask
     # backend
     tasks = []
@@ -122,29 +112,15 @@ def extract(
 
         output_chunks = feature_extract_fn.output_shape
 
-    # args = args_list = [(input_data, reg, block_size, feature_extract_fn, new_zarr) for reg in regions]
-
-    # with multiprocessing.Pool() as pool:
-    #     tasks = pool.starmap(create_task, tqdm(args, total=len(regions)))
-
     log.info(f"Creating delayed functions...")
-    for reg in tqdm(regions, total=len(regions)):
-        start_time = time.time()
-        delayed_chunk = read(input_data, reg)
 
-        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, feature_extract_fn)
-
-        new_region = [
-            slice(0, feature_extract_fn.n_features, None),
-            slice(0, 1, None),
-        ]  # Set the C and Z slices
-        chunk_size = block_size // output_chunks[2]
-        new_region.extend(normalize_slices(reg[-2:]
-        , chunk_size))  # Reduce the YX slices
-
-        delayed_write = dask.delayed(write)(new_zarr, delayed_result, new_region)
-
-        tasks.append(delayed_write)
+    args_list = create_starmap_args(regions, input_data, feature_extract_fn, 
+                                   new_zarr, block_size, output_chunks)
+    
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        tasks = list(
+            pool.starmap(process_region, tqdm(args_list, total=len(regions), desc="Processing regions"))
+            )
 
     start_time = time.time()
     run_dask_backend(tasks)
@@ -176,4 +152,24 @@ def create_task(input_data, region, block_size, feature_extract_fn, new_zarr):
 
     delayed_write = dask.delayed(write)(new_zarr, delayed_result, new_region)
 
+    return delayed_write
+
+def create_starmap_args(regions, input_data, feature_extract_fn, new_zarr, block_size, output_chunks):
+    """Create argument tuples for starmap"""
+    return [(reg, input_data, feature_extract_fn, new_zarr, block_size, output_chunks) 
+            for reg in regions]
+
+def process_region(reg, input_data, feature_extract_fn, new_zarr, block_size, output_chunks):
+    """Process a single region - to be used with multiprocessing"""
+    delayed_chunk = read(input_data, reg)
+    delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, feature_extract_fn)
+    
+    new_region = [
+        slice(0, feature_extract_fn.n_features, None),
+        slice(0, 1, None),
+    ]
+    chunk_size = block_size // output_chunks[2]
+    new_region.extend(normalize_slices(reg[-2:], chunk_size))
+    
+    delayed_write = dask.delayed(write)(new_zarr, delayed_result, new_region)
     return delayed_write
