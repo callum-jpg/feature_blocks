@@ -5,6 +5,7 @@ from .phikon import PhikonV2 as PhikonV2
 from .phikon_patch import PhikonV2Patch as PhikonV2Patch
 from .gigapath_tile import GigaPathTile as GigaPathTile
 from .gigapath_tile_patch import GigaPathTilePatch as GigaPathTilePatch
+from .uni import UNI as UNI
 
 __all__ = [
     "ConvFeatures",
@@ -14,6 +15,7 @@ __all__ = [
     "PhikonV2Patch",
     "GigaPathTile",
     "GigaPathTilePatch"
+    "UNI",
 ]
 
 available_models = {
@@ -24,4 +26,5 @@ available_models = {
     "phikon_patch": PhikonV2Patch,
     "gigapath": GigaPathTile,
     "gigapath_patch": GigaPathTilePatch,
+    "uni": UNI,
 }
