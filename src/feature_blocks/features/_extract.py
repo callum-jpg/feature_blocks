@@ -95,22 +95,13 @@ def extract(
         overwrite=True,
         fill_value=numpy.nan,  # Value to use for empty chunks
     )
+    # Load the above zarr as a dask array
+    new_zarr = dask.array.from_zarr(save_path)
 
     # Create tasks. This is a list of delayed jobs to be run on the dask
     # backend
     tasks = []
 
-    def update_region(region, block_size, feature_extract_fn):
-        # Since we are 
-        chunk_size = block_size // feature_extract_fn.output_shape[2]
-
-        # Construct the new region        
-        new_region = [
-            slice(0, feature_extract_fn.n_features, None),
-            slice(0, 1, None),
-        ]  # Set the C and Z slices
-
-        output_chunks = feature_extract_fn.output_shape
 
     log.info(f"Creating delayed functions...")
 
