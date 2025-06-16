@@ -124,13 +124,13 @@ def filter_slices_by_mask(
     """
     foreground = []
     background = []
-    
+
     for slc in slices:
         if np.any(mask_array[slc] > 0):
             foreground.append(slc)
         else:
             background.append(slc)
-    
+
     return foreground, background
 
 

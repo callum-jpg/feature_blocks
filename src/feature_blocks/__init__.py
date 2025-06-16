@@ -1,4 +1,5 @@
 import logging
+
 from ._logging import configure_logger
 
 log = logging.getLogger("feature_blocks")

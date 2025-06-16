@@ -1,7 +1,9 @@
+import typing
+
 import cv2
 import numpy
-import typing
 import shapely
+
 
 def tissue_detection(
     image: numpy.ndarray,
@@ -29,13 +31,13 @@ def tissue_detection(
         image (numpy.ndarray): RGB histology image to threshold.
         min_region_size (int, optional): Minimum size of foreground objects. Measured
         as total number of pixels. Defaults to 5_000.
-        max_hole_size (int, optional): Maximum size threshold for hole objects to keep. Otherwise, holes 
+        max_hole_size (int, optional): Maximum size threshold for hole objects to keep. Otherwise, holes
         will be filled. Hole has to be within a valid parent contour. Defaults to 1_500.
         outer_contours_only (bool, optional): Only retain the outermost contour and fill all holes within
         this contour. Defaults to False.
         blur_kernel (int, optional): Blur kernel applied before thresholding. Must be odd. Defaults to 17.
         morph_kernel_size (int, optional): Opening and closing kernel size. Defaults to 7.
-        morph_n_iterations (int, optional): Number of iterations to perform opening and closing, each. 
+        morph_n_iterations (int, optional): Number of iterations to perform opening and closing, each.
         Defaults to 3.
         manual_threshold (int, optional): Manual threshold to apply, rather than using Otsu. Defaults to None.
         return_poly (bool, optional): If True, returns polygon coordinates. If True, outer_contours_only must
@@ -47,7 +49,9 @@ def tissue_detection(
     """
 
     if return_poly:
-        assert outer_contours_only == True, "If return_poly is True outer_contours_only must also be True."
+        assert (
+            outer_contours_only == True
+        ), "If return_poly is True outer_contours_only must also be True."
 
     # Convert the image to HSV and extract the saturation channel
     hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
@@ -65,16 +69,18 @@ def tissue_detection(
     # Mask the saturation channel based on the manual_threshold
     # This can remove black regions (eg. from image padding) being erroneously
     # included in the saturation image.
-    saturation_channel = numpy.where(value_channel > manual_threshold, saturation_channel, 0)
+    saturation_channel = numpy.where(
+        value_channel > manual_threshold, saturation_channel, 0
+    )
 
     # Apply median blur
     blurred_image = cv2.medianBlur(saturation_channel, ksize=blur_kernel)
 
     # Apply thresholding to create a binary mask
     _, mask = cv2.threshold(
-        src=blurred_image, 
-        thresh=manual_threshold, 
-        maxval=255, 
+        src=blurred_image,
+        thresh=manual_threshold,
+        maxval=255,
         type=threshold_type,
     )
 
@@ -82,14 +88,20 @@ def tissue_detection(
     struct_elem = numpy.ones((morph_kernel_size, morph_kernel_size), dtype=numpy.uint8)
 
     # Perform morphological opening and closing to clean up the mask
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, struct_elem, iterations=morph_n_iterations)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, struct_elem, iterations=morph_n_iterations)
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_OPEN, struct_elem, iterations=morph_n_iterations
+    )
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_CLOSE, struct_elem, iterations=morph_n_iterations
+    )
 
     # Set contour retrieval mode
     mode = cv2.RETR_EXTERNAL if outer_contours_only else cv2.RETR_CCOMP
 
     # Find contours
-    contours, hierarchy = cv2.findContours(mask.copy(), mode=mode, method=cv2.CHAIN_APPROX_NONE)
+    contours, hierarchy = cv2.findContours(
+        mask.copy(), mode=mode, method=cv2.CHAIN_APPROX_NONE
+    )
 
     # If no contours are found, return an empty mask
     if hierarchy is None:
@@ -122,14 +134,20 @@ def tissue_detection(
 
         # Create boolean masks for size thresholds
         # Only contours above the given threshold will be kept
-        outer_contour_valid = numpy.array([cv2.contourArea(c) > min_region_size for c in contours])
-        hole_contour_valid = numpy.array([cv2.contourArea(c) > max_hole_size for c in contours])
+        outer_contour_valid = numpy.array(
+            [cv2.contourArea(c) > min_region_size for c in contours]
+        )
+        hole_contour_valid = numpy.array(
+            [cv2.contourArea(c) > max_hole_size for c in contours]
+        )
 
         # Check if hole contours have valid parents
-        valid_hole_parents = numpy.array([
-            hierarchy[i, 3] in numpy.where(outer_contour_valid)[0]
-            for i in range(len(contours))
-        ])
+        valid_hole_parents = numpy.array(
+            [
+                hierarchy[i, 3] in numpy.where(outer_contour_valid)[0]
+                for i in range(len(contours))
+            ]
+        )
 
         # Fill the appropriate contours
         for i, contour in enumerate(contours):
@@ -139,6 +157,6 @@ def tissue_detection(
             # Only keep hole contours if they are valid and are within a parent
             elif is_hole_contour[i] and hole_contour_valid[i] and valid_hole_parents[i]:
                 # Subtract hole from mask
-                cv2.fillPoly(mask_out, [contour], 0)  
+                cv2.fillPoly(mask_out, [contour], 0)
 
     return mask_out

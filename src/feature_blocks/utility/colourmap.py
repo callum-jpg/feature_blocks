@@ -1,5 +1,6 @@
 import matplotlib
 
+
 def make_cmap(colors: list, add_background: bool = True):
     """For a list of hexcode colors, create a matplotlib
     colormap. It's intended to be a discrete colormap, so the number of colors

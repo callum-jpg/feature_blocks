@@ -1,13 +1,15 @@
-from spatialdata.models import SpatialElement
-from xarray import DataArray, DataTree
 import numpy
+from xarray import DataArray, DataTree
+
+from spatialdata.models import SpatialElement
+
 
 def get_spatial_element(
     element_dict: dict[str, SpatialElement],
     key: str | None = None,
     return_key: bool = False,
     as_spatial_image: bool = False,
-    image_scale: int = None
+    image_scale: int = None,
 ) -> SpatialElement | tuple[str, SpatialElement]:
     """Gets an element from a SpatialData object.
 
@@ -24,7 +26,9 @@ def get_spatial_element(
 
     if key is not None:
         assert key in element_dict, f"Spatial element '{key}' not found."
-        return _return_element(element_dict, key, return_key, as_spatial_image, image_scale)
+        return _return_element(
+            element_dict, key, return_key, as_spatial_image, image_scale
+        )
 
     assert (
         len(element_dict) > 0
@@ -39,7 +43,11 @@ def get_spatial_element(
 
 
 def _return_element(
-    element_dict: dict[str, SpatialElement], key: str, return_key: bool, as_spatial_image: bool, image_scale: int
+    element_dict: dict[str, SpatialElement],
+    key: str,
+    return_key: bool,
+    as_spatial_image: bool,
+    image_scale: int,
 ) -> SpatialElement | tuple[str, SpatialElement]:
     element = element_dict[key]
 

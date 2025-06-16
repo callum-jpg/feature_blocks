@@ -21,25 +21,31 @@ from tqdm import tqdm
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.image import tissue_detection
 from feature_blocks.models import available_models
-from feature_blocks.slice import (filter_slices_by_mask, generate_slices,
-                                  normalize_slices)
+from feature_blocks.slice import (
+    filter_slices_by_mask,
+    generate_slices,
+    normalize_slices,
+)
 from feature_blocks.task import infer, read, write
 
 log = logging.getLogger(__name__)
 
+
 def extract(
     input_zarr_path: str,
     feature_extraction_method: str,
-    block_size: int, 
+    block_size: int,
     output_zarr_path: str,
     calculate_mask: bool = False,
     image_downsample: int = 1,
-    masked_block_value = numpy.nan,
+    masked_block_value=numpy.nan,
 ):
 
     input_data = dask.array.from_zarr(input_zarr_path)
 
-    assert input_data.ndim == 4, f"Expected zarr store to have 4 dimensions (C, Z, H, W). Got {input_data.ndim }."
+    assert (
+        input_data.ndim == 4
+    ), f"Expected zarr store to have 4 dimensions (C, Z, H, W). Got {input_data.ndim }."
 
     # Load the zarr store to be processed
     feature_extract_fn = _get_model(feature_extraction_method)
@@ -51,25 +57,25 @@ def extract(
     regions = generate_nd_slices(input_data.shape, block_size, [2, 3])
 
     if calculate_mask:
-            log.info("Calculating mask...")
-            mask = tissue_detection(
-                input_data[:, 0, ::image_downsample, ::image_downsample].compute().transpose(1, 2, 0)
-            )
-            # Mask has shape (Y, X). Resize this to the input image
-            mask = skimage.transform.resize(
-                mask,
-                order=0,
-                output_shape = input_data.shape[-2:]
-            )
-            mask = mask[numpy.newaxis, numpy.newaxis] # Add C an Z dimensions back
+        log.info("Calculating mask...")
+        mask = tissue_detection(
+            input_data[:, 0, ::image_downsample, ::image_downsample]
+            .compute()
+            .transpose(1, 2, 0)
+        )
+        # Mask has shape (Y, X). Resize this to the input image
+        mask = skimage.transform.resize(
+            mask, order=0, output_shape=input_data.shape[-2:]
+        )
+        mask = mask[numpy.newaxis, numpy.newaxis]  # Add C an Z dimensions back
 
-            log.info(f"Before masking there was {len(regions)} possible regions")
-            regions, _background_slices = filter_slices_by_mask(regions, mask)
-            log.info(f"After masking there were {len(regions)} regions inside the mask")
+        log.info(f"Before masking there was {len(regions)} possible regions")
+        regions, _background_slices = filter_slices_by_mask(regions, mask)
+        log.info(f"After masking there were {len(regions)} regions inside the mask")
 
-            assert (
-                len(regions) > 0
-            ), "No foreground regions found after masking. Adjust or disable masking."
+        assert (
+            len(regions) > 0
+        ), "No foreground regions found after masking. Adjust or disable masking."
 
     # For the zarr file to be saved, determine how many chunks
     # there will be in Y and X.
@@ -93,8 +99,8 @@ def extract(
     )  # (C, Z, Y, X)
 
     # Prepare output zarr file
-    # Optional parallel writing (I don't think we need this 
-    # since there are no block overlaps/conflicts): 
+    # Optional parallel writing (I don't think we need this
+    # since there are no block overlaps/conflicts):
     # https://zarr.readthedocs.io/en/v1.1.0/tutorial.html#parallel-computing-and-synchronization
     output_data = zarr.create(
         shape=output_shape,
@@ -109,48 +115,84 @@ def extract(
     # backend
     tasks = []
 
-
     log.info("Creating delayed functions...")
 
-    args_list = create_starmap_args(regions, input_zarr_path, feature_extract_fn, 
-                                   output_zarr_path, block_size, output_chunks)
-    
+    args_list = create_starmap_args(
+        regions,
+        input_zarr_path,
+        feature_extract_fn,
+        output_zarr_path,
+        block_size,
+        output_chunks,
+    )
+
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         tasks = list(
-            pool.starmap(process_region, tqdm(args_list, total=len(regions), desc="Processing regions"))
+            pool.starmap(
+                process_region,
+                tqdm(args_list, total=len(regions), desc="Processing regions"),
             )
+        )
 
     start_time = time.time()
     run_dask_backend(tasks)
     elapsed = time.time() - start_time
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
 
+
 def _get_model(model: typing.Callable | str) -> "torch.nn.Module":
     if isinstance(model, str):
-        assert model in available_models, (
-            f"'{model}' is not a valid model name. Valid names are: {', '.join(list(available_models.keys()))}"
-        )
+        assert (
+            model in available_models
+        ), f"'{model}' is not a valid model name. Valid names are: {', '.join(list(available_models.keys()))}"
 
         return available_models[model]()
 
     return model
 
-def create_starmap_args(regions, input_zarr_path, feature_extract_fn, output_zarr_path, block_size, output_chunks):
-    """Create argument tuples for starmap"""
-    return [(reg, input_zarr_path, feature_extract_fn, output_zarr_path, block_size, output_chunks) 
-            for reg in regions]
 
-def process_region(reg, input_zarr_path, feature_extract_fn, output_zarr_path, block_size, output_chunks):
+def create_starmap_args(
+    regions,
+    input_zarr_path,
+    feature_extract_fn,
+    output_zarr_path,
+    block_size,
+    output_chunks,
+):
+    """Create argument tuples for starmap"""
+    return [
+        (
+            reg,
+            input_zarr_path,
+            feature_extract_fn,
+            output_zarr_path,
+            block_size,
+            output_chunks,
+        )
+        for reg in regions
+    ]
+
+
+def process_region(
+    reg,
+    input_zarr_path,
+    feature_extract_fn,
+    output_zarr_path,
+    block_size,
+    output_chunks,
+):
     """Process a single region - to be used with multiprocessing"""
     delayed_chunk = dask.delayed(read)(input_zarr_path, reg)
     delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, feature_extract_fn)
-    
+
     new_region = [
         slice(0, feature_extract_fn.n_features, None),
         slice(0, 1, None),
     ]
     chunk_size = block_size // output_chunks[2]
     new_region.extend(normalize_slices(reg[-2:], chunk_size))
-    
-    delayed_write = dask.delayed(write, pure=True)(output_zarr_path, delayed_result, new_region)
+
+    delayed_write = dask.delayed(write, pure=True)(
+        output_zarr_path, delayed_result, new_region
+    )
     return delayed_write

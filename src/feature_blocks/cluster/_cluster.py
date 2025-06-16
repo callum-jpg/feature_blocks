@@ -1,6 +1,7 @@
 import typing
 
 import anndata
+import einops
 import matplotlib.pyplot as plt
 import numpy
 import scanpy
@@ -8,9 +9,6 @@ from sklearn.cluster import HDBSCAN, KMeans
 from sklearn.decomposition import PCA
 
 from feature_blocks.utility import make_cmap
-
-import einops
-
 
 
 def cluster_blocks(
@@ -26,7 +24,8 @@ def cluster_blocks(
 
     # Define the linearised block shapes (n_features, YXZ)
     linear_shape = (
-        feature_blocks.shape[0], feature_blocks.shape[1] * feature_blocks.shape[2] * feature_blocks.shape[3]
+        feature_blocks.shape[0],
+        feature_blocks.shape[1] * feature_blocks.shape[2] * feature_blocks.shape[3],
     )
 
     # Reshape to array of (num_features_per_block, num_blocks)
@@ -42,8 +41,9 @@ def cluster_blocks(
     #     pca_proj_ch,
     # ).T
 
-
-    reshaped_features = reshaped_features / numpy.linalg.norm(reshaped_features, axis=0, keepdims=True)
+    reshaped_features = reshaped_features / numpy.linalg.norm(
+        reshaped_features, axis=0, keepdims=True
+    )
 
     # Find where feature_blocks is NaN, which represents background
     mask = numpy.any(numpy.isnan(reshaped_features), axis=0)
@@ -101,7 +101,13 @@ def cluster_blocks(
     inverted_idx = numpy.setdiff1d(range(output_features.shape[1]), idx_to_cluster)
     output_features[:, inverted_idx] = numpy.nan
 
-    output_features = einops.rearrange(output_features, "C (Z H W) -> C Z H W", Z=feature_blocks.shape[1], H=feature_blocks.shape[2], W=feature_blocks.shape[3])
+    output_features = einops.rearrange(
+        output_features,
+        "C (Z H W) -> C Z H W",
+        Z=feature_blocks.shape[1],
+        H=feature_blocks.shape[2],
+        W=feature_blocks.shape[3],
+    )
 
     if return_adata:
         return output_features, adata
@@ -110,8 +116,9 @@ def cluster_blocks(
     else:
         return output_features
 
+
 def nan_drop_fn(array, fn, output_feature_size):
-    """Apply a function to an array that has the form 
+    """Apply a function to an array that has the form
     (n_samples, n_features). If n_samples contains NaN values, these
     will not be passed to the function.
     """
@@ -129,7 +136,7 @@ def nan_drop_fn(array, fn, output_feature_size):
 
     # Create an array of NaN values based on n_samples and output_feature_size
     output_features = numpy.full((array.shape[0], output_feature_size), numpy.nan)
-    # Fill in the features for the non NaN values. 
+    # Fill in the features for the non NaN values.
     output_features[valid_mask] = output
 
     return output_features

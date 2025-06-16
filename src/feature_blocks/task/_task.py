@@ -2,6 +2,7 @@ import dask.array
 
 from feature_blocks.slice import normalize_slices
 
+
 @dask.delayed
 def create_task(region, input_data, new_zarr, chunk_size, feature_extract_fn):
     assert (

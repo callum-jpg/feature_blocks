@@ -2,10 +2,16 @@ import logging
 import os
 from typing import Callable
 
-from dask.distributed import Client, LocalCluster, progress, performance_report, wait
-from distributed.utils import silence_logging_cmgr
-
 import dask
+from dask.distributed import (
+    Client,
+    LocalCluster,
+    as_completed,
+    performance_report,
+    progress,
+    wait,
+)
+from distributed.utils import silence_logging_cmgr
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +44,7 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
             memory="16GB",
             walltime="03:00:00",
             log_directory="logs",
-            python="singularity exec --env PATH=/homes/callum/.local/lib/python3.11/site-packages:$PATH /nfs/research/uhlmann/callum/dockerfiles/histology_features/histology_features.simg python"
+            python="singularity exec --env PATH=/homes/callum/.local/lib/python3.11/site-packages:$PATH /nfs/research/uhlmann/callum/dockerfiles/histology_features/histology_features.simg python",
         )
     else:
         try:
@@ -57,31 +63,37 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
             log.info(f"Using {n_workers} n_workers")
 
     if visualise_graph:
-        dask.visualize(*functions, filename="dask-task-graph", format="svg", optimize_graph=True, color="order")
+        dask.visualize(
+            *functions,
+            filename="dask-task-graph",
+            format="svg",
+            optimize_graph=True,
+            color="order",
+        )
 
     client = Client(cluster, asynchronous=False)
 
-    with performance_report(filename = "performance_report.html"):
+    with performance_report(filename="performance_report.html"):
         futures = client.compute(functions)
         progress(futures, notebook=False)
 
     # Process results with timeout
     completed_count = 0
     failed_indices = []
-    
+
     for i, future in enumerate(as_completed(futures, timeout=600 * len(functions))):
         try:
             # Get result with individual timeout
             result = future.result(timeout=600)
-            
+
             completed_count += 1
             if completed_count % 100 == 0:  # Progress update every 100 functions
                 print(f"Completed {completed_count}/{len(functions)} tasks")
-                
+
         except Exception as e:
             print(f"Task {i} failed: {e}")
             failed_indices.append(i)
-    
+
     print(f"Completed: {completed_count}, Failed: {len(failed_indices)}")
 
     # Silence cluster shutdown

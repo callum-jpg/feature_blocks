@@ -7,7 +7,7 @@ from transformers import AutoImageProcessor, AutoModel
 class PhikonV2Patch(nn.Module):
     def __init__(self):
         super().__init__()
-        
+
         self.n_features = 1024
         self.output_shape = (self.n_features, 1, 14, 14)  # (C, Z, H, W)
 
@@ -28,7 +28,10 @@ class PhikonV2Patch(nn.Module):
         # since it can be used as the z-dim
         # features = features.view(self.output_shape)
         features = einops.rearrange(
-            features, "B (P_H P_W) D -> D B P_H P_W", P_H=self.output_shape[2], P_W=self.output_shape[3]
+            features,
+            "B (P_H P_W) D -> D B P_H P_W",
+            P_H=self.output_shape[2],
+            P_W=self.output_shape[3],
         )
 
         return features.cpu().numpy()
