@@ -3,7 +3,7 @@ import skimage
 from feature_blocks.models import available_models
 from feature_blocks.image import tissue_detection
 from feature_blocks.task import create_task, read, infer, write
-from feature_blocks.slice import generate_slices, filter_slices_by_mask, normalize_slices
+from feature_blocks.slice import generate_nd_slices, filter_slices_by_mask, normalize_slices
 from feature_blocks.backend import run_dask_backend
 import logging
 import numpy
@@ -39,7 +39,7 @@ def extract(
     # slice objects that will be used to index the zarr store.
     # XY slices are have shape (SIZE, SIZE) due to the slice object
     # step size being defined as SIZE
-    regions = generate_slices(input_data.shape, block_size, [2, 3])
+    regions = generate_nd_slices(input_data.shape, block_size, [2, 3])
 
     if calculate_mask:
             log.info(f"Calculating mask...")
