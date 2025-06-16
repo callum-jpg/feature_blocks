@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 
-def generate_slices(
+def generate_nd_slices(
     shape: Tuple[int, int, int, int], size: int, slice_axes: Optional[List[int]] = None
 ) -> List[Tuple[slice, ...]]:
     """
@@ -28,17 +28,30 @@ def generate_slices(
     ranges = []
     for axis in range(ndim):
         if axis in slice_axes:
+            # Create slices for this axis
+            # Set stop, which is the maximum of this dimension
             stop = shape[axis]
+            # Step is the size. Ie. the size of each bounding box
             step = size
+            # Add the range fn to ranges. This fn will create the indices
+            # we need for our slices``
             ranges.append(range(0, stop - 1, step))
         else:
-            ranges.append([None])  # Use slice(None)
+            # Use slice(None) since this axis is not to be sliced
+            ranges.append([None])  
 
     slices = []
     for indices in product(*ranges):
+        # ranges is a list of range functions (or None).
+        # By creating the product of these range iterables, 
+        # we define the slice start and stop for each dimension.
+        # Each range defined the **start** index of a given bounding
+        # box, which is why we add "size".
+        # If slice is None (ie. dimension is not to be iterated over)
+        # we define the slice object as None
         slc = tuple(
             slice(i, i + size) if i is not None else slice(None)
-            for i, axis in zip(indices, range(ndim))
+            for i in indices
         )
         slices.append(slc)
 
