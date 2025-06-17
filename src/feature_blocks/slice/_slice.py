@@ -38,20 +38,19 @@ def generate_nd_slices(
             ranges.append(range(0, stop - 1, step))
         else:
             # Use slice(None) since this axis is not to be sliced
-            ranges.append([None])  
+            ranges.append([None])
 
     slices = []
     for indices in product(*ranges):
         # ranges is a list of range functions (or None).
-        # By creating the product of these range iterables, 
+        # By creating the product of these range iterables,
         # we define the slice start and stop for each dimension.
         # Each range defined the **start** index of a given bounding
         # box, which is why we add "size".
         # If slice is None (ie. dimension is not to be iterated over)
         # we define the slice object as None
         slc = tuple(
-            slice(i, i + size) if i is not None else slice(None)
-            for i in indices
+            slice(i, i + size) if i is not None else slice(None) for i in indices
         )
         slices.append(slc)
 
@@ -62,9 +61,10 @@ def generate_centroid_slices(
     shape: Tuple[int, int, int, int],
     size: int,
     segmentations: "geopandas.GeoDataFrame",
+    id_col: str = None,
 ):
     """
-    For segmentations provided in a GeoPandasDataframe, create slice objects around the 
+    For segmentations provided in a GeoPandasDataframe, create slice objects around the
     centroid of each polygon.
     """
 
@@ -76,23 +76,11 @@ def generate_centroid_slices(
         # Amount to expand out from XY by
         half_size = size // 2
 
-        y_min = max(
-            0, 
-            y - half_size
-        )
-        y_max = min(
-            shape[2],
-            y + half_size
-        )
+        y_min = max(0, y - half_size)
+        y_max = min(shape[2], y + half_size)
 
-        x_min = max(
-            0,
-            x - half_size
-        )
-        x_max = min(
-            shape[3], 
-            x + half_size
-        )
+        x_min = max(0, x - half_size)
+        x_max = min(shape[3], x + half_size)
 
         slc = (
             slice(None),
