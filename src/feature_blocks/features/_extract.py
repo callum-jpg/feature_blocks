@@ -3,7 +3,7 @@ import skimage
 from feature_blocks.models import available_models
 from feature_blocks.image import tissue_detection
 from feature_blocks.task import create_task, read, infer, write
-from feature_blocks.slice import generate_nd_slices, filter_slices_by_mask, normalize_slices
+from feature_blocks.slice import generate_nd_slices, filter_slices_by_mask, normalize_slices, generate_centroid_slices
 from feature_blocks.backend import run_dask_backend
 import logging
 import math
@@ -36,6 +36,8 @@ def extract(
     feature_extraction_method: str,
     block_size: int,
     output_zarr_path: str,
+    block_method: list["block", "centroid"] = "block",
+    segmentations: "geopandas.GeoDataFrame",
     calculate_mask: bool = False,
     image_downsample: int = 1,
     masked_block_value=numpy.nan,
@@ -50,11 +52,14 @@ def extract(
     # Load the zarr store to be processed
     feature_extract_fn = _get_model(feature_extraction_method)
 
-    # For each dimension, (channels, z, y, x) construct a list of
-    # slice objects that will be used to index the zarr store.
-    # XY slices are have shape (SIZE, SIZE) due to the slice object
-    # step size being defined as SIZE
-    regions = generate_nd_slices(input_data.shape, block_size, [2, 3])
+    if block_method.casefold() == "block":
+        # For each dimension, (channels, z, y, x) construct a list of
+        # slice objects that will be used to index the zarr store.
+        # XY slices are have shape (SIZE, SIZE) due to the slice object
+        # step size being defined as SIZE
+        regions = generate_nd_slices(input_data.shape, block_size, [2, 3])
+    elif block_method.casefold() == "centroid":
+        regions = generate_centroid_slices(input_data.shape, size=block_size, segmentations=segmentations)
 
     if calculate_mask:
         log.info("Calculating mask...")
