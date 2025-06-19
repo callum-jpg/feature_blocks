@@ -6,6 +6,6 @@ def read(input_zarr_path, region):
     if len(region) == 4:
         # Read a block
         return z[region]
-    elif len(region) == 5:
+    elif len(region) == 2:
         # Read a ROI
         return z[region[1:]]

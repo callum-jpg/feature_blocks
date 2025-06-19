@@ -3,7 +3,12 @@ import skimage
 from feature_blocks.models import available_models
 from feature_blocks.image import tissue_detection
 from feature_blocks.task import create_task, read, infer, write
-from feature_blocks.slice import generate_nd_slices, filter_slices_by_mask, normalize_slices, generate_centroid_slices
+from feature_blocks.slice import (
+    generate_nd_slices,
+    filter_slices_by_mask,
+    normalize_slices,
+    generate_centroid_slices,
+)
 from feature_blocks.backend import run_dask_backend
 import logging
 import math
@@ -84,12 +89,11 @@ def extract(
         )
 
     elif block_method.casefold() == "centroid":
-        regions = generate_centroid_slices(input_data.shape, size=block_size, segmentations=segmentations)
-
-        output_shape = (
-            len(regions), 
-            feature_extract_fn.n_features
+        regions = generate_centroid_slices(
+            input_data.shape, size=block_size, segmentations=segmentations
         )
+
+        output_shape = (len(regions), feature_extract_fn.n_features)
 
         output_chunks = (1, feature_extract_fn.n_features)
 
@@ -196,17 +200,49 @@ def process_region(
     output_chunks,
 ):
     """Process a single region - to be used with multiprocessing"""
-    delayed_chunk = dask.delayed(read)(input_zarr_path, reg)
-    delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, feature_extract_fn)
 
-    new_region = [
-        slice(0, feature_extract_fn.n_features, None),
-        slice(0, 1, None),
-    ]
-    chunk_size = block_size // output_chunks[2]
-    new_region.extend(normalize_slices(reg[-2:], chunk_size))
+    # Block method is being used
+    if len(reg) == 4:
+        delayed_chunk = dask.delayed(read)(input_zarr_path, reg)
+        delayed_result = dask.delayed(infer, pure=True)(
+            delayed_chunk, feature_extract_fn
+        )
+        # Build where the new region will be in the output zarr
+        # (n_features, 1, H, W)
+        new_region = [
+            slice(0, feature_extract_fn.n_features, None),
+            slice(0, 1, None),
+        ]
+        # feature_blocks only supports square blocks, so we can infer that
+        # H == W, hence why we only select output_chunks[2]
+        chunk_size = block_size // output_chunks[2]
+        new_region.extend(normalize_slices(reg[-2:], chunk_size))
 
-    delayed_write = dask.delayed(write, pure=True)(
-        output_zarr_path, delayed_result, new_region
-    )
+        delayed_write = dask.delayed(write, pure=True)(
+            output_zarr_path, delayed_result, new_region
+        )
+    # ROI method is being used
+    elif len(reg) == 2:
+        chunk_id, chunk_slices = reg[0], reg[1:][0]
+
+        delayed_chunk = dask.delayed(read)(input_zarr_path, chunk_slices)
+
+        delayed_result = dask.delayed(infer, pure=True)(
+            delayed_chunk, feature_extract_fn
+        )
+
+        new_region = [
+            chunk_id,
+            slice(0, feature_extract_fn.n_features),
+        ]
+
+        delayed_write = dask.delayed(write, pure=True)(
+            output_zarr_path, delayed_result, new_region
+        )
+
+    else:
+        raise ValueError(
+            f"Region is of length {len(reg)} rather than the expected 2 or 4. Region: {reg}"
+        )
+
     return delayed_write
