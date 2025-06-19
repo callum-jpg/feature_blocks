@@ -82,8 +82,8 @@ def extract(config_file: str):
 
     if segmentation_path is not None:
         segmentations = geopandas.read_file(segmentation_path)
-        
-        segmentations.geometry = gdf_downsampled.scale(
+
+        segmentations.geometry = segmentations.scale(
             xfact=1/config.get("image_downsample", 1), 
             yfact=1/config.get("image_downsample", 1), 
             origin=(0, 0)
