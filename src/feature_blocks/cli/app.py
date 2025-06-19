@@ -8,6 +8,8 @@ from dask_image.imread import imread
 from dask_image.ndfilters import gaussian
 from spatial_image import to_spatial_image
 
+import geopandas
+
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.features import extract as _extract
 from feature_blocks.image import standardise_image
@@ -76,9 +78,26 @@ def extract(config_file: str):
             overwrite=True,
         ).compute()
 
+    segmentation_path = config.get("segmentations", None)
+
+    if segmentation_path is not None:
+        segmentations = geopandas.read_file(segmentation_path)
+        
+        segmentations.geometry = gdf_downsampled.scale(
+            xfact=1/config.get("image_downsample", 1), 
+            yfact=1/config.get("image_downsample", 1), 
+            origin=(0, 0)
+        )
+    else:
+        segmentations = None
+        
+
+
     _extract(
         input_zarr_path=input_path,
         feature_extraction_method=config["feature_extraction_method"],
+        segmentations = segmentations,
+        block_method = config.get("block_method", "block"),
         block_size=config["block_size"],
         output_zarr_path=config["save_path"],
         calculate_mask=config["calculate_mask"],
