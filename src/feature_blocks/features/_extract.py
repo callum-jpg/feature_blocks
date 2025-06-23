@@ -21,11 +21,11 @@ from feature_blocks.slice import (
     filter_slices_by_mask,
     generate_nd_slices,
     normalize_slices,
+    generate_centroid_slices,
 )
 from feature_blocks.task import infer, read, write
 
 log = logging.getLogger(__name__)
-
 
 def extract(
     input_zarr_path: str,
