@@ -6,7 +6,7 @@ def write(zarr_path, data, region):
     if len(region) == 4:
         # Feature block
         z[tuple(region)] = data
-    elif len(region) == 5:
+    elif len(region) == 2:
         # ROI features
         # Squeeze to drop ZYX dimensions since we do not need them for ROI
-        z[region[0]] = data.squeeze()
+        z[tuple(region)] = data.squeeze()

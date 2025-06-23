@@ -37,6 +37,21 @@ def extract(config_file: str):
 
     segmentations = load_segmentations(config)
 
+    segmentation_path = config.get("segmentations", None)
+
+    if segmentation_path is not None:
+        segmentations = geopandas.read_file(segmentation_path)
+
+        segmentations.geometry = segmentations.scale(
+            xfact=1/config.get("image_downsample", 1), 
+            yfact=1/config.get("image_downsample", 1), 
+            origin=(0, 0)
+        )
+    else:
+        segmentations = None
+        
+
+
     _extract(
         input_zarr_path=input_zarr_path,
         feature_extraction_method=config["feature_extraction_method"],
