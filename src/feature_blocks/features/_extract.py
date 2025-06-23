@@ -1,15 +1,6 @@
 import dask.array
 import skimage
-from feature_blocks.models import available_models
-from feature_blocks.image import tissue_detection
-from feature_blocks.task import create_task, read, infer, write
-from feature_blocks.slice import (
-    generate_nd_slices,
-    filter_slices_by_mask,
-    normalize_slices,
-    generate_centroid_slices,
-)
-from feature_blocks.backend import run_dask_backend
+
 import logging
 import math
 import multiprocessing
@@ -23,8 +14,18 @@ import skimage
 import zarr
 from tqdm import tqdm
 
-log = logging.getLogger(__name__)
+from feature_blocks.backend import run_dask_backend
+from feature_blocks.image import tissue_detection
+from feature_blocks.models import available_models
+from feature_blocks.slice import (
+    filter_slices_by_mask,
+    generate_nd_slices,
+    normalize_slices,
+    generate_centroid_slices,
+)
+from feature_blocks.task import infer, read, write
 
+log = logging.getLogger(__name__)
 
 def extract(
     input_zarr_path: str,
