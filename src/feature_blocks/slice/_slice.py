@@ -71,7 +71,13 @@ def generate_centroid_slices(
     assert len(shape) == 4, "Expected shape of length 4 (C, Z, H, W)"
 
     def polygon_bb(polygon):
-        y, x = round(polygon.geometry.y), round(polygon.geometry.x)
+        if id_col is None:
+            # Name is the equivalent to index
+            centroid_id = polygon.name
+        else:
+            centroid_id = polygon[id_col]
+
+        y, x = round(polygon.geometry.centroid.y), round(polygon.geometry.centroid.x)
 
         # Amount to expand out from XY by
         half_size = size // 2
@@ -89,7 +95,7 @@ def generate_centroid_slices(
             slice(x_min, x_max),
         )
 
-        return slc
+        return centroid_id, slc
 
     slices = segmentations.apply(polygon_bb, axis=1).tolist()
 

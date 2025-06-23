@@ -29,6 +29,7 @@ dependencies = [
     "bokeh",
     "matplotlib",
     "ipycytoscape",
+    "geopandas",
     ]
 
 [project.scripts]

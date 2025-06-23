@@ -1,5 +1,6 @@
 import dask.array
 import skimage
+
 import logging
 import math
 import multiprocessing
@@ -31,6 +32,8 @@ def extract(
     feature_extraction_method: str,
     block_size: int,
     output_zarr_path: str,
+    block_method: list["block", "centroid"] = "block",
+    segmentations: typing.Optional["geopandas.GeoDataFrame"] = None,
     calculate_mask: bool = False,
     image_downsample: int = 1,
     masked_block_value=numpy.nan,
@@ -45,11 +48,67 @@ def extract(
     # Load the zarr store to be processed
     feature_extract_fn = _get_model(feature_extraction_method)
 
-    # For each dimension, (channels, z, y, x) construct a list of
-    # slice objects that will be used to index the zarr store.
-    # XY slices are have shape (SIZE, SIZE) due to the slice object
-    # step size being defined as SIZE
-    regions = generate_nd_slices(input_data.shape, block_size, [2, 3])
+    if block_method.casefold() == "block":
+        # For each dimension, (channels, z, y, x) construct a list of
+        # slice objects that will be used to index the zarr store.
+        # XY slices are have shape (SIZE, SIZE) due to the slice object
+        # step size being defined as SIZE
+        regions = generate_nd_slices(input_data.shape, block_size, [2, 3])
+
+        # For the zarr file to be saved, determine how many chunks
+        # there will be in Y and X.
+        num_chunks_y = math.ceil(input_data.shape[-2] / block_size)
+        num_chunks_x = math.ceil(input_data.shape[-1] / block_size)
+
+        # We need to know a priori what the output will be, which we can gather
+        # from the feature extraction function
+        output_chunks = feature_extract_fn.output_shape  # (C, Z, Y, X)
+
+        assert (
+            output_chunks[2] == output_chunks[3]
+        ), f"Output chunksize defined in feature_extract_fn should be equal. Got {output_chunks[2], output_chunks[3]}"
+
+        # Define the total size of the output zarr
+        output_shape = (
+            feature_extract_fn.n_features,
+            1,
+            num_chunks_y * output_chunks[2],
+            num_chunks_x * output_chunks[3],
+        )  # (C, Z, Y, X)
+
+        # Prepare output zarr file
+        # Optional parallel writing (I don't think we need this
+        # since there are no block overlaps/conflicts):
+        # https://zarr.readthedocs.io/en/v1.1.0/tutorial.html#parallel-computing-and-synchronization
+        output_data = zarr.create(
+            shape=output_shape,
+            chunks=output_chunks,
+            dtype=numpy.float32,
+            store=output_zarr_path,
+            overwrite=True,
+            fill_value=numpy.nan,  # Value to use for empty chunks
+        )
+
+    elif block_method.casefold() == "centroid":
+        regions = generate_centroid_slices(input_data.shape, size=block_size, segmentations=segmentations)
+
+        output_shape = (
+            len(regions), 
+            feature_extract_fn.n_features
+        )
+
+        output_chunks = (1, feature_extract_fn.n_features)
+
+        output_data = zarr.create(
+            shape=output_shape,
+            chunks=output_chunks,
+            dtype=numpy.float32,
+            store=output_zarr_path,
+            overwrite=True,
+            fill_value=numpy.nan,  # Value to use for empty chunks
+        )
+    else:
+        raise ValueError(f"block_method '{block_method}' not recognised.")
 
     if calculate_mask:
         log.info("Calculating mask...")
@@ -71,40 +130,6 @@ def extract(
         assert (
             len(regions) > 0
         ), "No foreground regions found after masking. Adjust or disable masking."
-
-    # For the zarr file to be saved, determine how many chunks
-    # there will be in Y and X.
-    num_chunks_y = math.ceil(input_data.shape[-2] / block_size)
-    num_chunks_x = math.ceil(input_data.shape[-1] / block_size)
-
-    # We need to know a priori what the output will be, which we can gather
-    # from the feature extraction function
-    output_chunks = feature_extract_fn.output_shape  # (C, Z, Y, X)
-
-    assert (
-        output_chunks[2] == output_chunks[3]
-    ), f"Output chunksize defined in feature_extract_fn should be equal. Got {output_chunks[2], output_chunks[3]}"
-
-    # Define the total size of the output zarr
-    output_shape = (
-        feature_extract_fn.n_features,
-        1,
-        num_chunks_y * output_chunks[2],
-        num_chunks_x * output_chunks[3],
-    )  # (C, Z, Y, X)
-
-    # Prepare output zarr file
-    # Optional parallel writing (I don't think we need this
-    # since there are no block overlaps/conflicts):
-    # https://zarr.readthedocs.io/en/v1.1.0/tutorial.html#parallel-computing-and-synchronization
-    output_data = zarr.create(
-        shape=output_shape,
-        chunks=output_chunks,
-        dtype=numpy.float32,
-        store=output_zarr_path,
-        overwrite=True,
-        fill_value=numpy.nan,  # Value to use for empty chunks
-    )
 
     # Create tasks. This is a list of delayed jobs to be run on the dask
     # backend
