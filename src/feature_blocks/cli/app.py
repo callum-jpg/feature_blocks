@@ -19,79 +19,111 @@ log = logging.getLogger(__name__)
 app = typer.Typer()
 
 
+def load_config(config_file: str) -> dict:
+    """Load configuration from TOML file."""
+    with open(config_file, "rb") as f:
+        return tomllib.load(f)
+
+# def parse_
+
+def load_and_process_image(config: dict) -> Path:
+    """
+    Load and process image according to configuration.
+    
+    Returns the path to the processed zarr file.
+    """
+    input_path = Path(config["image_path"])
+    
+    if input_path.suffix == ".zarr":
+        # Image is already in zarr format
+        return input_path
+    
+    # Load and process the image
+    image = imread(input_path)
+    
+    # Standardise the image to CZYX
+    image, dimension_order = standardise_image(
+        image, config["image_dimension_order"]
+    )
+    
+    # Create zarr path
+    zarr_path = input_path.parent / (input_path.stem + ".zarr")
+    
+    log.info(f"Saving image as chunked zarr to: {zarr_path}")
+    
+    # Convert to spatial_image for intuitive dimensions
+    image = (
+        to_spatial_image(image, dims=dimension_order)
+        .chunk("auto")
+        .transpose("c", "z", "y", "x")
+        .data
+    )
+    
+    # Apply optional preprocessing (currently commented out)
+    # image = normalise_rgb(
+    #     image,
+    #     mean=(0.5, 0.5, 0.5),
+    #     std=(0.5, 0.5, 0.5),
+    # )
+    
+    # SIGMA = 0.25
+    # image = gaussian(image, sigma=(0, 0, SIGMA, SIGMA), mode="reflect", cval=0.0)
+    
+    # Apply downsampling
+    downsample_factor = config.get("image_downsample", 1)
+    image = image[
+        :,
+        :,
+        ::downsample_factor,
+        ::downsample_factor,
+    ].rechunk((1, 1, config["block_size"], config["block_size"]))
+    
+    # Save to zarr
+    image.to_zarr(
+        zarr_path,
+        compute=False,
+        overwrite=True,
+    ).compute()
+    
+    return zarr_path
+
+def load_segmentations(config: dict):
+    """
+    Load and process segmentations if specified in config.
+    
+    Returns segmentations GeoDataFrame or None.
+    """
+    segmentation_path = config.get("segmentations", None)
+    
+    if segmentation_path is None:
+        return None
+    
+    segmentations = geopandas.read_file(segmentation_path)
+    
+    # Scale segmentations according to image downsampling
+    downsample_factor = config.get("image_downsample", 1)
+    segmentations.geometry = segmentations.scale(
+        xfact=1/downsample_factor, 
+        yfact=1/downsample_factor, 
+        origin=(0, 0)
+    )
+    
+    return segmentations
+
+
+
 @app.command()
 def extract(config_file: str):
     """
     Perform feature block extraction from an image file.
     """
-    with open(config_file, "rb") as f:
-        config = tomllib.load(f)
+    config = load_config(config_file)
 
-    input_path = Path(config["image_path"])
+    input_image_zarr_path = load_and_process_image(config)
 
-    save_path = "feature_blocks_" + input_path.stem + ".zarr"
-
-    if input_path.suffix != ".zarr":
-        # Load image
-        image = imread(input_path)
-
-        # Standarise the image to CZYX
-        image, dimension_order = standardise_image(
-            image, config["image_dimension_order"]
-        )
-
-        # Update the input_path to now reflect the zarr store
-        input_path = input_path.parent / (input_path.stem + ".zarr")
-
-        log.info(f"Saving image as chunked zarr to: {input_path}")
-
-        # Convert to a spatial_image for intuitive dimensions
-        image = (
-            to_spatial_image(image, dims=dimension_order)
-            .chunk("auto")
-            .transpose("c", "z", "y", "x")
-            .data
-        )
-
-        # image = normalise_rgb(
-        #     image,
-        #     mean=(0.5, 0.5, 0.5),
-        #     std=(0.5, 0.5, 0.5),
-        # )
-
-        # SIGMA = 0.25
-        # image = gaussian(image, sigma=(0, 0, SIGMA, SIGMA), mode="reflect", cval=0.0)
-
-        # Simple downsample
-        image = image[
-            :,
-            :,
-            :: config.get("image_downsample", 1),
-            :: config.get("image_downsample", 1),
-        ].rechunk((1, 1, config["block_size"], config["block_size"]))
-
-        # Create a dask graph for zarr saving
-        # TODO: Would distributed write improve speed?
-        image.to_zarr(
-            input_path,
-            compute=False,
-            overwrite=True,
-        ).compute()
+    segmentations = load_segmentations(config)
 
     segmentation_path = config.get("segmentations", None)
-
-    if segmentation_path is not None:
-        segmentations = geopandas.read_file(segmentation_path)
-
-        segmentations.geometry = segmentations.scale(
-            xfact=1/config.get("image_downsample", 1), 
-            yfact=1/config.get("image_downsample", 1), 
-            origin=(0, 0)
-        )
-    else:
-        segmentations = None
-        
-
 
     _extract(
         input_zarr_path=input_path,
