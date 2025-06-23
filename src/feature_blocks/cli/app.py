@@ -13,10 +13,48 @@ import geopandas
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.features import extract as _extract
 from feature_blocks.image import standardise_image
+from feature_blocks.utility import get_spatial_element
+from feature_blocks import FeatureBlockConstants
+
+import typing
 
 log = logging.getLogger(__name__)
 
 app = typer.Typer()
+
+
+@app.command()
+def extract(config_file: str):
+    """
+    Perform feature block extraction from an image file.
+    """
+    config = load_config(config_file)
+
+    # We take the input_zarr_path since it allows each dask worker
+    # to load the chunk needed from the zarr store. ie. the whole
+    # array is not loaded into memory
+    input_zarr_path = load_and_process_image(config)
+
+    segmentations = load_segmentations(config)
+
+    _extract(
+        input_zarr_path=input_zarr_path,
+        feature_extraction_method=config["feature_extraction_method"],
+        segmentations = segmentations,
+        block_method = config.get("block_method", "block"),
+        block_size=config["block_size"],
+        output_zarr_path=config["save_path"],
+        calculate_mask=config["calculate_mask"],
+        image_downsample=config["image_downsample"],
+    )
+
+
+@app.command()
+def cluster(config_file: str):
+    """
+    Cluster embeddings from a zarr store.
+    """
+    pass
 
 
 def load_config(config_file: str) -> dict:
@@ -24,7 +62,34 @@ def load_config(config_file: str) -> dict:
     with open(config_file, "rb") as f:
         return tomllib.load(f)
 
-# def parse_
+def parse_path(path, reader_fn: typing.Callable | None = None):
+    """
+    If path refers to a file, return path.
+
+    If the path is a SpatialData object with ::data_key
+    (example below), return this data object
+
+    path_to_sdata.zarr::image_key
+    """
+
+    if "::" in path:
+        import spatialdata
+        
+        sdata_path, data_key = path.split("::")
+
+        log.info(f"Loading {data_key} from {sdata_path}")
+        
+        assert sdata_path.endswith(".zarr"), "SpatialData files must be zarr."
+
+        sdata = spatialdata.read_zarr(sdata_path)
+
+        data = get_spatial_element(sdata, data_key, as_spatial_image=True)
+        
+        return data
+    else:
+        log.info(f"Loading {path}...")
+        return reader_fn(path)
+
 
 def load_and_process_image(config: dict) -> Path:
     """
@@ -33,21 +98,20 @@ def load_and_process_image(config: dict) -> Path:
     Returns the path to the processed zarr file.
     """
     input_path = Path(config["image_path"])
-    
+
     if input_path.suffix == ".zarr":
         # Image is already in zarr format
         return input_path
-    
-    # Load and process the image
-    image = imread(input_path)
+
+    image = parse_path(input_path.as_posix(), imread)
     
     # Standardise the image to CZYX
     image, dimension_order = standardise_image(
         image, config["image_dimension_order"]
     )
     
-    # Create zarr path
-    zarr_path = input_path.parent / (input_path.stem + ".zarr")
+    # Create zarr save path
+    zarr_path = input_path.parent / FeatureBlockConstants.FEATURE_BLOCK_CACHE_DIR / FeatureBlockConstants.ZARR_IMAGE_NAME
     
     log.info(f"Saving image as chunked zarr to: {zarr_path}")
     
@@ -58,17 +122,7 @@ def load_and_process_image(config: dict) -> Path:
         .transpose("c", "z", "y", "x")
         .data
     )
-    
-    # Apply optional preprocessing (currently commented out)
-    # image = normalise_rgb(
-    #     image,
-    #     mean=(0.5, 0.5, 0.5),
-    #     std=(0.5, 0.5, 0.5),
-    # )
-    
-    # SIGMA = 0.25
-    # image = gaussian(image, sigma=(0, 0, SIGMA, SIGMA), mode="reflect", cval=0.0)
-    
+
     # Apply downsampling
     downsample_factor = config.get("image_downsample", 1)
     image = image[
@@ -94,11 +148,24 @@ def load_segmentations(config: dict):
     Returns segmentations GeoDataFrame or None.
     """
     segmentation_path = config.get("segmentations", None)
-    
+
     if segmentation_path is None:
         return None
     
-    segmentations = geopandas.read_file(segmentation_path)
+    segmentations = parse_path(segmentation_path, geopandas.read_file)
+
+    # Scale segmentations. Typically used to convert from 
+    # micron to pixel space
+    segmentation_scale_factor = config.get("segmentation_scale_factor", None)
+
+    if segmentation_scale_factor is not None:
+        log.info(f"Scaling segmentation shapes with segmentation_scale_factor: {segmentation_scale_factor}")
+        # Only scale if needed.
+        segmentations.geometry = segmentations.scale(
+            segmentation_scale_factor, 
+            segmentation_scale_factor, 
+            origin=(0, 0)
+        )
     
     # Scale segmentations according to image downsampling
     downsample_factor = config.get("image_downsample", 1)
@@ -109,37 +176,3 @@ def load_segmentations(config: dict):
     )
     
     return segmentations
-
-
-
-@app.command()
-def extract(config_file: str):
-    """
-    Perform feature block extraction from an image file.
-    """
-    config = load_config(config_file)
-
-    input_image_zarr_path = load_and_process_image(config)
-
-    segmentations = load_segmentations(config)
-
-    segmentation_path = config.get("segmentations", None)
-
-    _extract(
-        input_zarr_path=input_path,
-        feature_extraction_method=config["feature_extraction_method"],
-        segmentations = segmentations,
-        block_method = config.get("block_method", "block"),
-        block_size=config["block_size"],
-        output_zarr_path=config["save_path"],
-        calculate_mask=config["calculate_mask"],
-        image_downsample=config["image_downsample"],
-    )
-
-
-@app.command()
-def cluster(config_file: str):
-    """
-    Cluster embeddings from a zarr store.
-    """
-    pass
