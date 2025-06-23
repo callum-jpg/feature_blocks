@@ -37,21 +37,6 @@ def extract(config_file: str):
 
     segmentations = load_segmentations(config)
 
-    segmentation_path = config.get("segmentations", None)
-
-    if segmentation_path is not None:
-        segmentations = geopandas.read_file(segmentation_path)
-
-        segmentations.geometry = segmentations.scale(
-            xfact=1/config.get("image_downsample", 1), 
-            yfact=1/config.get("image_downsample", 1), 
-            origin=(0, 0)
-        )
-    else:
-        segmentations = None
-        
-
-
     _extract(
         input_zarr_path=input_zarr_path,
         feature_extraction_method=config["feature_extraction_method"],
@@ -168,6 +153,11 @@ def load_segmentations(config: dict):
         return None
     
     segmentations = parse_path(segmentation_path, geopandas.read_file)
+
+    # Set the index to the row number. We will use this
+    # index value to slice the zarr array. That is, 
+    # row 0 will be in (0, N) of the zarr store.
+    segmentations.index = range(len(segmentations))
 
     # Scale segmentations. Typically used to convert from 
     # micron to pixel space
