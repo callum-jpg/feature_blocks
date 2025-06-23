@@ -30,7 +30,7 @@ dependencies = [
     "matplotlib",
     "ipycytoscape",
     "geopandas",
-    "spatialdata>=0.2.6",
+    "spatialdata==0.4.0",
 ]
 
 [project.scripts]
