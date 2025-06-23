@@ -15,9 +15,9 @@ def get_spatial_element(
         as_spatial_image: Whether to return the element as a `SpatialImage` (if it is a `DataTree`)
 
     Returns:
-        SpatialData element
+        SpatialData element.
     """
-    assert len(element_dict), "No spatial element was found in the dict."
+    # assert len(element_dict), "No spatial element was found in the dict."
 
     assert key in element_dict, f"Spatial element '{key}' not found."
     return _return_element(element_dict, key, as_spatial_image)
@@ -29,6 +29,6 @@ def _return_element(
     element = element_dict[key]
 
     if as_spatial_image and isinstance(element, DataTree):
-        element = next(iter(element["scale0"].values()))
+        element = getattr(element, "scale0").image.data
 
     return element
