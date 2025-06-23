@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE.txt" }
 dependencies = [
-    "dask",
+    "dask<=2024.11.2",
     "dask_image",
     "dask_jobqueue",
     "distributed",
@@ -30,7 +30,8 @@ dependencies = [
     "matplotlib",
     "ipycytoscape",
     "geopandas",
-    ]
+    "spatialdata>=0.2.6",
+]
 
 [project.scripts]
 feature_blocks = "feature_blocks.main:app"
