@@ -1,0 +1,39 @@
+# Path to the image to run model inference on.
+# If the image is not already a zarr, it will be converted and saved as one.
+image_path = "path/to/image.ome.tiff"
+
+# Path to segmentations in polygon format that can be loaded with geopandas
+# Supports SpatialData zarr stores, where the segmentation GeoDataframe key is after ":::"
+# For example: /path/to/sdata.zarr:::segmentation_shapes_name
+segmentations = "/path/to/segmentations.geojson"
+
+# Provide information about dimension order
+image_dimension_order = ["c", "y", "x"]
+
+# Optional downsampling of the input image
+image_downsample = 1
+
+# Size of the window to run inference on
+block_size = 112
+
+# Either centroid (eg. of a segmentation) or block
+block_method = "centroid"
+
+# Select the feature extraction method. 
+feature_extraction_method = "uni"
+
+# Where to save the output features
+save_path = "/path/to/save.zarr"
+
+# Control mask calculation. If calculated, it can prevent running inference on regions of background
+# in the image.
+calculate_mask = false
+# Massively speed up mask computation by downsampling the image.
+mask_downsample = 8
+
+# Define the number of workers to use. This is useful for
+# SLURM environments. Each worker is one node, for example. 
+n_workers = 5
+
+# Add the python path each node should use.
+python_path = "singularity exec singularity_container.simg python"
