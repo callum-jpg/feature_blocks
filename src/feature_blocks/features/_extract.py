@@ -32,6 +32,8 @@ def extract(
     feature_extraction_method: str,
     block_size: int,
     output_zarr_path: str,
+    n_workers: int | None = None,
+    python_path: str = "python",
     block_method: list["block", "centroid"] = "block",
     segmentations: typing.Optional["geopandas.GeoDataFrame"] = None,
     calculate_mask: bool = False,
@@ -154,7 +156,11 @@ def extract(
         )
 
     start_time = time.time()
-    run_dask_backend(tasks)
+    run_dask_backend(
+        tasks,
+        n_workers=n_workers,
+        python_path=python_path,
+        )
     elapsed = time.time() - start_time
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
 

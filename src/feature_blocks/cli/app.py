@@ -39,13 +39,15 @@ def extract(config_file: str):
 
     _extract(
         input_zarr_path=input_zarr_path,
-        feature_extraction_method=config["feature_extraction_method"],
+        feature_extraction_method=config.get("feature_extraction_method"),
         segmentations = segmentations,
         block_method = config.get("block_method", "block"),
-        block_size=config["block_size"],
-        output_zarr_path=config["save_path"],
-        calculate_mask=config["calculate_mask"],
-        image_downsample=config["image_downsample"],
+        block_size=config.get("block_size"),
+        output_zarr_path=config.get("save_path"),
+        n_workers=config.get("n_workers", 1),
+        python_path=config.get("python_path", "python"),
+        calculate_mask=config.get("calculate_mask"),
+        image_downsample=config.get("image_downsample"),
     )
 
 

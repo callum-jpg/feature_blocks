@@ -30,19 +30,22 @@ def get_n_workers():
         return os.cpu_count()
 
 
-def run_dask_backend(functions: list[Callable], visualise_graph: bool = False):
-    if in_slurm():  # Temp block
+def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n_workers: int | None = None, python_path: str = "python"):
+    if in_slurm():
         from dask_jobqueue import SLURMCluster
 
-        log.info("Using SLURM cluster")
-        print("Using SLURM cluster")
+
+        if n_workers is None:
+            n_workers = 1
+            log.info(f"n_workers is {n_workers}. Defaulting to using only 1 worker.")
+
+        log.info(f"Using SLURM cluster with {n_workers} n_workers")
 
         cluster = SLURMCluster(
-            # n_workers=200,
-            n_workers=400,
+            n_workers=n_workers,
             cores=1,
             memory="16GB",
-            walltime="03:00:00",
+            walltime="08:00:00",
             log_directory="logs",
             python="singularity exec --env PATH=/homes/callum/.local/lib/python3.11/site-packages:$PATH /nfs/research/uhlmann/callum/dockerfiles/histology_features/histology_features.simg python",
         )
