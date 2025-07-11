@@ -13,8 +13,9 @@ import geopandas
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.features import extract as _extract
 from feature_blocks.image import standardise_image
-from feature_blocks.utility import get_spatial_element
+from feature_blocks.utility import get_spatial_element, parse_path
 from feature_blocks import FeatureBlockConstants
+from feature_blocks.segmentation import load_segmentations
 
 import typing
 
@@ -63,34 +64,6 @@ def load_config(config_file: str) -> dict:
     """Load configuration from TOML file."""
     with open(config_file, "rb") as f:
         return tomllib.load(f)
-
-def parse_path(path, reader_fn: typing.Callable | None = None):
-    """
-    If path refers to a file, return path.
-
-    If the path is a SpatialData object with ::data_key
-    (example below), return this data object
-
-    path_to_sdata.zarr::image_key
-    """
-
-    if "::" in path:
-        import spatialdata
-        
-        sdata_path, data_key = path.split("::")
-
-        log.info(f"Loading {data_key} from {sdata_path}")
-        
-        assert sdata_path.endswith(".zarr"), "SpatialData files must be zarr."
-
-        sdata = spatialdata.read_zarr(sdata_path)
-
-        data = get_spatial_element(sdata, data_key, as_spatial_image=True)
-        
-        return data
-    else:
-        log.info(f"Loading {path}...")
-        return reader_fn(path)
 
 
 def load_and_process_image(config: dict) -> Path:
@@ -142,44 +115,3 @@ def load_and_process_image(config: dict) -> Path:
     ).compute()
     
     return zarr_path
-
-def load_segmentations(config: dict):
-    """
-    Load and process segmentations if specified in config.
-    
-    Returns segmentations GeoDataFrame or None.
-    """
-    segmentation_path = config.get("segmentations", None)
-
-    if segmentation_path is None:
-        return None
-    
-    segmentations = parse_path(segmentation_path, geopandas.read_file)
-
-    # Set the index to the row number. We will use this
-    # index value to slice the zarr array. That is, 
-    # row 0 will be in (0, N) of the zarr store.
-    segmentations.index = range(len(segmentations))
-
-    # Scale segmentations. Typically used to convert from 
-    # micron to pixel space
-    segmentation_scale_factor = config.get("segmentation_scale_factor", None)
-
-    if segmentation_scale_factor is not None:
-        log.info(f"Scaling segmentation shapes with segmentation_scale_factor: {segmentation_scale_factor}")
-        # Only scale if needed.
-        segmentations.geometry = segmentations.scale(
-            segmentation_scale_factor, 
-            segmentation_scale_factor, 
-            origin=(0, 0)
-        )
-    
-    # Scale segmentations according to image downsampling
-    downsample_factor = config.get("image_downsample", 1)
-    segmentations.geometry = segmentations.scale(
-        xfact=1/downsample_factor, 
-        yfact=1/downsample_factor, 
-        origin=(0, 0)
-    )
-    
-    return segmentations
