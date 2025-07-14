@@ -7,13 +7,6 @@ import torch
 from torch import nn
 
 
-def tensor_to_dask(tensor):
-    dask_array = dask.array.from_array(tensor.numpy(), chunks=tensor.shape).astype(
-        numpy.uint16
-    )
-    return dask_array
-
-
 def random_torch_tensor(shape):
     """
     When spawning dask workers, if they start at the same time
