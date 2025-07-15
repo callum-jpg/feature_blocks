@@ -52,14 +52,6 @@ def extract(config_file: str):
     )
 
 
-@app.command()
-def cluster(config_file: str):
-    """
-    Cluster embeddings from a zarr store.
-    """
-    pass
-
-
 def load_config(config_file: str) -> dict:
     """Load configuration from TOML file."""
     with open(config_file, "rb") as f:
