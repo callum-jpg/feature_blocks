@@ -21,3 +21,14 @@ def test_conv_model_inference():
     assert output.shape == model.output_shape
 
 
+def test_lbp_features():
+    model = _get_model("lbp")
+    
+    input_data = numpy.random.randint(0, 255, size=(1, 1, 256, 256))
+
+    output = model(
+        input_data
+    )
+
+    assert output.shape == model.output_shape
+
