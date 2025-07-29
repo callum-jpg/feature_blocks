@@ -1,7 +1,11 @@
 import dask.array
 import numpy
 import tifffile
+import os
+import zarr
+import logging
 
+log = logging.getLogger(__name__)
 
 def load_tiff_scale(tiff_path: str, level: int) -> dask.array.Array:
     """From a OME-TIFF, load only a specific level. Prevents loading
@@ -51,3 +55,29 @@ def standardise_image(image, dimension_order: tuple[str]):
             image = dask.array.expand_dims(image, axis=i)
 
     return image, dims
+
+def zarr_exists(zarr_path, new_array):
+    if not os.path.exists(zarr_path):
+        return True
+
+    try:
+        z = zarr.open(zarr_path, mode="r")
+
+        # Compare shape
+        if z.shape != new_array.shape:
+            return True
+
+        # Compare chunks
+        if z.chunks != new_array.chunksize:
+            return True
+
+        # Now check the content
+        existing = dask.array.from_zarr(zarr_path)
+        if not dask.array.all(existing == new_array).compute():
+            return True
+
+        return False  # All checks passed, skip writing
+
+    except Exception as e:
+        log.info(f"Warning: failed to read existing Zarr. Overwriting. Reason: {e}")
+        return True  # If error reading, better to overwrite

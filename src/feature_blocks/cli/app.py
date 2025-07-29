@@ -12,7 +12,7 @@ import geopandas
 
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.features import extract as _extract
-from feature_blocks.image import standardise_image
+from feature_blocks.image import standardise_image, zarr_exists
 from feature_blocks.utility import get_spatial_element, parse_path
 from feature_blocks import FeatureBlockConstants
 from feature_blocks.segmentation import load_segmentations
@@ -80,8 +80,6 @@ def load_and_process_image(config: dict) -> Path:
     # Create zarr save path
     zarr_path = input_path.parent / FeatureBlockConstants.FEATURE_BLOCK_CACHE_DIR / FeatureBlockConstants.ZARR_IMAGE_NAME
     
-    log.info(f"Saving image as chunked zarr to: {zarr_path}")
-    
     # Convert to spatial_image for intuitive dimensions
     image = (
         to_spatial_image(image, dims=dimension_order)
@@ -98,12 +96,15 @@ def load_and_process_image(config: dict) -> Path:
         ::downsample_factor,
         ::downsample_factor,
     ].rechunk((1, 1, config["block_size"], config["block_size"]))
-    
-    # Save to zarr
-    image.to_zarr(
-        zarr_path,
-        compute=False,
-        overwrite=True,
-    ).compute()
+
+    log.info(f"Checking if image has already been saved to zarr...")
+    if zarr_exists(zarr_path, image):
+        log.info(f"Saving image as chunked zarr to: {zarr_path}")
+        # Save to zarr if it hasn't already been saved.
+        image.to_zarr(
+            zarr_path,
+            compute=False,
+            overwrite=True,
+        ).compute()
     
     return zarr_path
