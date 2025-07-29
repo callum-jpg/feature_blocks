@@ -15,7 +15,7 @@ def lbp_features(
     Extract Local Binary Pattern (LBP) features from an image for clustering.
 
     Parameters:
-        image (numpy.ndarray): Grayscale image to process (2D array).
+        image (numpy.ndarray): Grayscale (2D) or RGB (3D) image to process (C, Y, X).
         radius (int or list of int): Radius or radii for LBP computation.
         method (str): LBP method ('uniform', 'default', 'ror', 'var').
         normalize (str): Normalization method ('l1', 'l2', 'none').
@@ -27,8 +27,18 @@ def lbp_features(
         ValueError: If image is not 2D or parameters are invalid.
     """
     # Input validation
-    if not isinstance(image, numpy.ndarray) or image.ndim != 2:
-        raise ValueError("Image must be a 2D numpy array")
+    if not isinstance(image, numpy.ndarray):
+        raise ValueError("Image must be a numpy array")
+    
+    if image.ndim not in [2, 3]:
+        raise ValueError("Image must be 2D (grayscale) or 3D (RGB)")
+    
+    if image.ndim == 3 and image.shape[0] not in [3, 4]:
+        raise ValueError("RGB image must have 3 or 4 channels")
+
+    # Convert RGB image to grayscale
+    if image.ndim == 3:
+        image = skimage.color.rgb2gray(image, channel_axis=0)
 
     if isinstance(radius, int):
         radius = [radius]
@@ -85,7 +95,10 @@ class LBP(nn.Module):
         self.output_shape = (self.n_features, 1, 1, 1)  # (C, Z, H, W)
 
     def forward(self, x):
-        features = lbp_features(x, radius=self.radius)
+        features = lbp_features(
+            x.squeeze(), # Remove z-dim (C, Z, Y, X)
+            radius=self.radius
+        )
 
         return features
 
