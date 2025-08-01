@@ -106,5 +106,7 @@ def load_and_process_image(config: dict) -> Path:
             compute=False,
             overwrite=True,
         ).compute()
+    else:
+        log.info(f"Loading existing zarr store: {zarr_path}")
     
     return zarr_path
