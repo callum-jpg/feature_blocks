@@ -100,7 +100,8 @@ class LBP(nn.Module):
             radius=self.radius
         )
 
-        return features
+        # Add the Z, Y, X dimensions back, which is expected for feature_blocks
+        return features[..., numpy.newaxis, numpy.newaxis, numpy.newaxis]
 
     def _get_n_features(self, radius, method: str = "uniform"):
         """
