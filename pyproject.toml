@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "feature_blocks"
-version = "0.0"
+version = "1.0.0"
 description = "Extract and cluster features from image blocks."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -50,5 +50,5 @@ torchvision = [
 ]
 
 [project.optional-dependencies]
-dev = ["black", "isort", "ruff"]
+dev = ["pytest", "black", "isort", "ruff", "ipykernel"]
 test = ["coverage"]

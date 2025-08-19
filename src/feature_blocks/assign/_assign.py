@@ -24,7 +24,7 @@ def assign_cell_cluster_block(
     centroids = scale_coords(
         xy=centroids,
         original_shape=original_shape,
-        new_shape=cluster_blocks.squeeze().shape,  # TODO: make cluster_blocks have a standardised size
+        new_shape=cluster_blocks.squeeze().shape,
     )
 
     cluster_block_id = cluster_blocks[centroids[:, 1], centroids[:, 0]].astype(int)
