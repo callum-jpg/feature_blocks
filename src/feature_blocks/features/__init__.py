@@ -1,1 +1,1 @@
-from ._extract import extract
+from ._extract import extract, get_model

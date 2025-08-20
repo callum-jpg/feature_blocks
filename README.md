@@ -46,7 +46,7 @@ save_path = "path/to/output.zarr"
 n_workers = 4
 ```
 
-### 2. Run Feature Extraction
+### 2. Run Feature Extraction (CLI)
 
 ```bash
 feature_blocks extract config.toml
@@ -63,28 +63,12 @@ model = UNI()
 
 # Extract features from image blocks
 features = extract(
-    image_path="image.ome.tiff",
+    input_zarr_path="image.ome.tiff",
     model=model,
-    block_size=112
+    block_size=112,
+    output_zarr_path = "output.zarr",
 )
 ```
-
-## Configuration Options
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `image_path` | Path to input image | Required |
-| `segmentations` | Path to segmentation polygons | Optional |
-| `image_dimension_order` | Dimension order (e.g., ["c", "y", "x"]) | ["c", "y", "x"] |
-| `image_downsample` | Image downsampling factor | 1 |
-| `block_size` | Size of extraction window | 112 |
-| `block_method` | "centroid" or "block" | "centroid" |
-| `feature_extraction_method` | Model to use | "uni" |
-| `save_path` | Output path | Required |
-| `calculate_mask` | Whether to calculate background mask | false |
-| `mask_downsample` | Mask downsampling factor | 8 |
-| `n_workers` | Number of parallel workers | 1 |
-| `python_path` | Python executable path | "python" |
 
 ## Supported Models
 
@@ -95,25 +79,6 @@ features = extract(
 - **Conv**: Simple convolutional baseline
 - **LBP**: Local Binary Pattern features
 - **Dummy**: Random features for testing
-
-## Advanced Usage
-
-### SpatialData Integration
-
-```python
-import spatialdata as sd
-from feature_blocks.utility import get_spatial_element
-
-# Load SpatialData object
-sdata = sd.read_zarr("path/to/spatial_data.zarr")
-
-# Extract features with SpatialData
-features = extract(
-    image_path="sdata.zarr:::image_key",
-    segmentations="sdata.zarr:::segmentation_shapes",
-    # ... other parameters
-)
-```
 
 ### Distributed Computing
 
@@ -149,52 +114,19 @@ class CustomModel(BaseModel):
 ### Python API
 
 #### Models
-- `UNI()` - Load UNI model
-- `PhiKon()` - Load PhiKon model  
-- `DINOv2()` - Load DINOv2 model
-- `GigaPathTile()` - Load GigaPath tile model
-- `GigaPathTilePatch()` - Load GigaPath patch model
-
-#### Functions
-- `extract()` - Main feature extraction function
-- `load_segmentations()` - Load segmentation data
-- `standardise_image()` - Standardize image format
+- `UNI()`
+- `PhiKon()`
+- `DINOv2()` 
+- `GigaPathTile()`
+- `GigaPathTilePatch()`
 
 ## Examples
 
-See the `examples/` directory for complete workflows:
-
-- `basic_extraction.py` - Simple feature extraction
-- `segmentation_workflow.py` - Using segmentation masks
-- `batch_processing.py` - Processing multiple images
-- `custom_model.py` - Using custom models
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See the `examples/` directory for complete workflows
 
 ## License
 
 This project is licensed under the MIT License - see [LICENSE.txt](LICENSE.txt) for details.
-
-## Citation
-
-If you use Feature Blocks in your research, please cite:
-
-```bibtex
-@software{feature_blocks,
-  title={Feature Blocks: Extract and cluster features from image blocks},
-  author={Your Name},
-  year={2024},
-  url={https://github.com/yourusername/feature_blocks}
-}
-```
-
-## Support
-
-- **Documentation**: [Full documentation](https://yourusername.github.io/feature_blocks)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/feature_blocks/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/feature_blocks/discussions)
 
 ## Acknowledgments
 

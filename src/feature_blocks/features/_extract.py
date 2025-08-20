@@ -48,7 +48,7 @@ def extract(
     ), f"Expected zarr store to have 4 dimensions (C, Z, H, W). Got {input_data.ndim }."
 
     # Load the zarr store to be processed
-    feature_extract_fn = _get_model(feature_extraction_method)
+    feature_extract_fn = get_model(feature_extraction_method)
 
     if block_method.casefold() == "block":
         # For each dimension, (channels, z, y, x) construct a list of
@@ -165,7 +165,7 @@ def extract(
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
 
 
-def _get_model(model: typing.Callable | str) -> "torch.nn.Module":
+def get_model(model: typing.Callable | str) -> "torch.nn.Module":
     if isinstance(model, str):
         assert (
             model in available_models
