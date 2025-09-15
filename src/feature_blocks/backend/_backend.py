@@ -20,12 +20,20 @@ def in_slurm():
     return "SLURM_JOB_ID" in os.environ
 
 
+def in_lsf():
+    return "LSB_JOBID" in os.environ
+
+
 def get_n_workers():
     # Check if it's a SLURM job
     slurm_cpus = os.getenv("SLURM_CPUS_ON_NODE")
+    # Check if it's an LSF job
+    lsf_cpus = os.getenv("LSB_SLOTS")
 
     if slurm_cpus is not None:
         return int(slurm_cpus)
+    elif lsf_cpus is not None:
+        return int(lsf_cpus)
     else:
         return os.cpu_count()
 
@@ -34,7 +42,6 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n
     if in_slurm():
         from dask_jobqueue import SLURMCluster
 
-
         if n_workers is None:
             n_workers = 1
             log.info(f"n_workers is {n_workers}. Defaulting to using only 1 worker.")
@@ -42,6 +49,23 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n
         log.info(f"Using SLURM cluster with {n_workers} n_workers")
 
         cluster = SLURMCluster(
+            n_workers=n_workers,
+            cores=1,
+            memory="16GB",
+            walltime="08:00:00",
+            log_directory="logs",
+            python=python_path,
+        )
+    elif in_lsf():
+        from dask_jobqueue import LSFCluster
+
+        if n_workers is None:
+            n_workers = 1
+            log.info(f"n_workers is {n_workers}. Defaulting to using only 1 worker.")
+
+        log.info(f"Using LSF cluster with {n_workers} n_workers")
+
+        cluster = LSFCluster(
             n_workers=n_workers,
             cores=1,
             memory="16GB",

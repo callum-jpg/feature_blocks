@@ -10,7 +10,7 @@ Feature Blocks is a Python package designed for extracting features from image b
 
 - **Multiple Model Support**: UNI, PhiKon, DINOv2, GigaPath, and custom models
 - **Flexible Block Processing**: Extract features from image blocks or segmentation centroids
-- **Distributed Computing**: Built-in support for SLURM and distributed processing
+- **Distributed Computing**: Built-in support for SLURM, LSF and distributed processing
 - **Multiple File Formats**: Support for OME-TIFF, Zarr, and SpatialData formats
 - **Configurable Pipeline**: TOML-based configuration for reproducible workflows
 
@@ -83,7 +83,7 @@ features = extract(
 ### Distributed Computing
 
 ```toml
-# For SLURM environments
+# For SLURM/LSF environments
 n_workers = 10
 python_path = "singularity exec container.simg python"
 ```
