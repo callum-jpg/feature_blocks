@@ -38,7 +38,7 @@ def get_n_workers():
         return os.cpu_count()
 
 
-def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n_workers: int | None = None, python_path: str = "python"):
+def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n_workers: int | None = None, python_path: str = "python", memory: str = "16GB"):
     if in_slurm():
         from dask_jobqueue import SLURMCluster
 
@@ -51,7 +51,7 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n
         cluster = SLURMCluster(
             n_workers=n_workers,
             cores=1,
-            memory="16GB",
+            memory=memory,
             walltime="08:00:00",
             log_directory="logs",
             python=python_path,
@@ -68,7 +68,7 @@ def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n
         cluster = LSFCluster(
             n_workers=n_workers,
             cores=1,
-            memory="16GB",
+            memory=memory,
             walltime="08:00:00",
             log_directory="logs",
             python=python_path,

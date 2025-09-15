@@ -34,6 +34,7 @@ def extract(
     output_zarr_path: str,
     n_workers: int | None = None,
     python_path: str = "python",
+    memory: str = "16GB",
     block_method: list["block", "centroid"] = "block",
     segmentations: typing.Optional["geopandas.GeoDataFrame"] = None,
     calculate_mask: bool = False,
@@ -160,6 +161,7 @@ def extract(
         tasks,
         n_workers=n_workers,
         python_path=python_path,
+        memory=memory,
         )
     elapsed = time.time() - start_time
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")

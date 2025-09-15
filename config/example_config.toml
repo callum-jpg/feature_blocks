@@ -37,3 +37,6 @@ n_workers = 5
 
 # Add the python path each node should use.
 python_path = "singularity exec singularity_container.simg python"
+
+# Memory allocation per worker for cluster computing
+memory = "16GB"

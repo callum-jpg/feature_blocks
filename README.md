@@ -44,6 +44,7 @@ block_method = "centroid"
 feature_extraction_method = "uni"
 save_path = "path/to/output.zarr"
 n_workers = 4
+memory = "16GB"
 ```
 
 ### 2. Run Feature Extraction (CLI)
@@ -86,6 +87,7 @@ features = extract(
 # For SLURM/LSF environments
 n_workers = 10
 python_path = "singularity exec container.simg python"
+memory = "32GB"  # Configurable memory per worker
 ```
 
 ### Custom Models

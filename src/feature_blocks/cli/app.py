@@ -47,6 +47,7 @@ def extract(config_file: str):
         output_zarr_path=config.get("save_path"),
         n_workers=config.get("n_workers", 1),
         python_path=config.get("python_path", "python"),
+        memory=config.get("memory", "16GB"),
         calculate_mask=config.get("calculate_mask"),
         image_downsample=config.get("image_downsample"),
     )
