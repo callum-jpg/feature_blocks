@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy
 import scanpy
 from sklearn.cluster import HDBSCAN, KMeans
-from sklearn.decomposition import PCA
 
 from feature_blocks.utility import make_cmap
 

@@ -1,7 +1,9 @@
 from itertools import product
 from typing import List, Optional, Tuple
 
-import numpy as np
+import numpy
+
+from ..utility._rasterize import rasterize_single_polygon
 
 
 def generate_nd_slices(
@@ -102,8 +104,77 @@ def generate_centroid_slices(
     return slices
 
 
+def generate_centroid_slices_with_single_masks(
+    shape: Tuple[int, int, int, int],
+    size: int,
+    segmentations: "geopandas.GeoDataFrame",
+    id_col: str = None,
+):
+    """
+    For segmentations provided in a GeoPandasDataframe, create slice objects around the
+    centroid of each polygon with individual mask data for CellProfiler feature extraction.
+
+    Each returned tuple represents one distributed task that will extract features
+    from a single segmentation polygon.
+
+    Args:
+        shape: Shape of the full image (C, Z, H, W)
+        size: Size of the region to extract around each centroid
+        segmentations: GeoDataFrame with polygon geometries
+        id_col: Column to use for object IDs, defaults to index
+
+    Returns:
+        List of tuples: (centroid_id, slice_obj, mask_data)
+        where mask_data contains only the single segmentation polygon
+    """
+
+    assert len(shape) == 4, "Expected shape of length 4 (C, Z, H, W)"
+
+    def polygon_bb_with_single_mask(polygon):
+        if id_col is None:
+            # Name is the equivalent to index
+            centroid_id = polygon.name
+        else:
+            centroid_id = polygon[id_col]
+
+        y, x = round(polygon.geometry.centroid.y), round(polygon.geometry.centroid.x)
+
+        # Amount to expand out from XY by
+        half_size = size // 2
+
+        y_min = max(0, y - half_size)
+        y_max = min(shape[2], y + half_size)
+
+        x_min = max(0, x - half_size)
+        x_max = min(shape[3], x + half_size)
+
+        slc = (
+            slice(None),
+            slice(None),
+            slice(y_min, y_max),
+            slice(x_min, x_max),
+        )
+
+        # Calculate region bounds and shape for mask rasterization
+        region_bounds = (x_min, y_min, x_max, y_max)
+        region_shape = (y_max - y_min, x_max - x_min)
+
+        # Rasterize only this single polygon
+        mask_data = rasterize_single_polygon(
+            polygon.geometry, region_bounds, region_shape, object_id=1
+        )
+
+        return centroid_id, slc, mask_data
+
+    slices_with_masks = segmentations.apply(
+        polygon_bb_with_single_mask, axis=1
+    ).tolist()
+
+    return slices_with_masks
+
+
 def filter_slices_by_mask(
-    slices: List[Tuple[slice, ...]], mask_array: np.ndarray
+    slices: List[Tuple[slice, ...]], mask_array: numpy.ndarray
 ) -> List[Tuple[slice, ...]]:
     """
     Filters a list of slices, keeping only those for which the corresponding
@@ -120,7 +191,7 @@ def filter_slices_by_mask(
     background = []
 
     for slc in slices:
-        if np.any(mask_array[slc] > 0):
+        if numpy.any(mask_array[slc] > 0):
             foreground.append(slc)
         else:
             background.append(slc)

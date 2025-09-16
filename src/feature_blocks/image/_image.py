@@ -1,11 +1,13 @@
+import logging
+import os
+
 import dask.array
 import numpy
 import tifffile
-import os
 import zarr
-import logging
 
 log = logging.getLogger(__name__)
+
 
 def load_tiff_scale(tiff_path: str, level: int) -> dask.array.Array:
     """From a OME-TIFF, load only a specific level. Prevents loading
@@ -55,6 +57,7 @@ def standardise_image(image, dimension_order: tuple[str]):
             image = dask.array.expand_dims(image, axis=i)
 
     return image, dims
+
 
 def zarr_exists(zarr_path, new_array):
     if not os.path.exists(zarr_path):

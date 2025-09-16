@@ -1,7 +1,6 @@
 import numpy
-from xarray import DataArray, DataTree
-
 from spatialdata.models import SpatialElement
+from xarray import DataTree
 
 
 def get_spatial_element(

@@ -29,10 +29,10 @@ def lbp_features(
     # Input validation
     if not isinstance(image, numpy.ndarray):
         raise ValueError("Image must be a numpy array")
-    
+
     if image.ndim not in [2, 3]:
         raise ValueError("Image must be 2D (grayscale) or 3D (RGB)")
-    
+
     if image.ndim == 3 and image.shape[0] not in [3, 4]:
         raise ValueError("RGB image must have 3 or 4 channels")
 
@@ -96,8 +96,7 @@ class LBP(nn.Module):
 
     def forward(self, x):
         features = lbp_features(
-            x.squeeze(), # Remove z-dim (C, Z, Y, X)
-            radius=self.radius
+            x.squeeze(), radius=self.radius  # Remove z-dim (C, Z, Y, X)
         )
 
         # Add the Z, Y, X dimensions back, which is expected for feature_blocks

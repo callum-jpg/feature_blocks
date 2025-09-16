@@ -8,7 +8,7 @@ similar to how you would use the CLI tool.
 
 import tempfile
 from pathlib import Path
-import numpy as np
+import numpy 
 import tomllib
 
 from feature_blocks.cli.app import extract
@@ -38,11 +38,11 @@ python_path = "python"
 def create_sample_image():
     """Create a sample image file."""
     # Create a dummy RGB image
-    image = np.random.randint(0, 255, size=(3, 500, 500), dtype=np.uint8)
+    image = numpy.random.randint(0, 255, size=(3, 500, 500), dtype=numpy.uint8)
     
     # In practice, you would save as OME-TIFF
     # For this example, we'll just save as numpy array
-    np.save("sample_image.ome.tiff", image)
+    numpy.save("sample_image.ome.tiff", image)
     
     return "sample_image.ome.tiff"
 

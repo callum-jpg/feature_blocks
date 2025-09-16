@@ -1,6 +1,6 @@
-from spatialdata import SpatialData
 from spatialdata.models import SpatialElement
-from xarray import DataArray, DataTree
+from xarray import DataTree
+
 
 def get_spatial_element(
     element_dict: dict[str, SpatialElement],
@@ -21,6 +21,7 @@ def get_spatial_element(
 
     assert key in element_dict, f"Spatial element '{key}' not found."
     return _return_element(element_dict, key, as_spatial_image)
+
 
 def _return_element(
     element_dict: dict[str, SpatialElement], key: str, as_spatial_image: bool

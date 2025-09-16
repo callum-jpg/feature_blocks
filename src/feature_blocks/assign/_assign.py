@@ -1,6 +1,4 @@
-import matplotlib.pyplot as plt
 import numpy
-import spatialdata_plot
 
 from feature_blocks.utility import get_spatial_element
 
@@ -62,7 +60,7 @@ def get_feature_block_cluster(
         new_shape=clustered_blocks.squeeze().shape,
     )
 
-    t = np.zeros_like(clustered_blocks.squeeze())
+    t = numpy.zeros_like(clustered_blocks.squeeze())
 
     t[centroids[:, 1], centroids[:, 0]] = 1
 

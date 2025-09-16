@@ -3,14 +3,8 @@ import os
 from typing import Callable
 
 import dask
-from dask.distributed import (
-    Client,
-    LocalCluster,
-    as_completed,
-    performance_report,
-    progress,
-    wait,
-)
+from dask.distributed import (Client, LocalCluster, as_completed,
+                              performance_report, progress)
 from distributed.utils import silence_logging_cmgr
 
 log = logging.getLogger(__name__)
@@ -38,7 +32,13 @@ def get_n_workers():
         return os.cpu_count()
 
 
-def run_dask_backend(functions: list[Callable], visualise_graph: bool = False, n_workers: int | None = None, python_path: str = "python", memory: str = "16GB"):
+def run_dask_backend(
+    functions: list[Callable],
+    visualise_graph: bool = False,
+    n_workers: int | None = None,
+    python_path: str = "python",
+    memory: str = "16GB",
+):
     if in_slurm():
         from dask_jobqueue import SLURMCluster
 

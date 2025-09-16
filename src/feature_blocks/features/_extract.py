@@ -1,6 +1,3 @@
-import dask.array
-import skimage
-
 import logging
 import math
 import multiprocessing
@@ -17,15 +14,14 @@ from tqdm import tqdm
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.image import tissue_detection
 from feature_blocks.models import available_models
-from feature_blocks.slice import (
-    filter_slices_by_mask,
-    generate_nd_slices,
-    normalize_slices,
-    generate_centroid_slices,
-)
-from feature_blocks.task import infer, read, write
+from feature_blocks.slice import (filter_slices_by_mask,
+                                  generate_centroid_slices,
+                                  generate_centroid_slices_with_single_masks,
+                                  generate_nd_slices, normalize_slices)
+from feature_blocks.task import infer, read, read_with_mask, write
 
 log = logging.getLogger(__name__)
+
 
 def extract(
     input_zarr_path: str,
@@ -93,9 +89,22 @@ def extract(
         )
 
     elif block_method.casefold() == "centroid":
-        regions = generate_centroid_slices(
-            input_data.shape, size=block_size, segmentations=segmentations
+        # Check if this is a CellProfiler model that needs mask data
+        is_cellprofiler = (
+            hasattr(feature_extract_fn, "__class__")
+            and feature_extract_fn.__class__.__name__ == "CellProfiler"
         )
+
+        if is_cellprofiler:
+            # Use the specialized function that includes mask data for each segmentation
+            regions = generate_centroid_slices_with_single_masks(
+                input_data.shape, size=block_size, segmentations=segmentations
+            )
+        else:
+            # Use the standard centroid slices without mask data
+            regions = generate_centroid_slices(
+                input_data.shape, size=block_size, segmentations=segmentations
+            )
 
         output_shape = (len(regions), feature_extract_fn.n_features)
 
@@ -162,7 +171,7 @@ def extract(
         n_workers=n_workers,
         python_path=python_path,
         memory=memory,
-        )
+    )
     elapsed = time.time() - start_time
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
 
@@ -230,7 +239,7 @@ def process_region(
         delayed_write = dask.delayed(write, pure=True)(
             output_zarr_path, delayed_result, new_region
         )
-    # ROI method is being used
+    # ROI method is being used (standard centroid)
     elif len(reg) == 2:
         chunk_id, chunk_slices = reg[0], reg[1:][0]
 
@@ -249,9 +258,30 @@ def process_region(
             output_zarr_path, delayed_result, new_region
         )
 
+    # CellProfiler method with mask data (centroid + mask)
+    elif len(reg) == 3:
+        chunk_id, chunk_slices, mask_data = reg
+
+        # Use the specialized read function that combines image and mask
+        region_with_mask = (chunk_id, chunk_slices, mask_data)
+        delayed_chunk = dask.delayed(read_with_mask)(input_zarr_path, region_with_mask)
+
+        delayed_result = dask.delayed(infer, pure=True)(
+            delayed_chunk, feature_extract_fn
+        )
+
+        new_region = [
+            chunk_id,
+            slice(0, feature_extract_fn.n_features),
+        ]
+
+        delayed_write = dask.delayed(write, pure=True)(
+            output_zarr_path, delayed_result, new_region
+        )
+
     else:
         raise ValueError(
-            f"Region is of length {len(reg)} rather than the expected 2 or 4. Region: {reg}"
+            f"Region is of length {len(reg)} rather than the expected 2, 3, or 4. Region: {reg}"
         )
 
     return delayed_write

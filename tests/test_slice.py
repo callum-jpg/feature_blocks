@@ -6,7 +6,7 @@ import shapely
 
 from unittest.mock import Mock, MagicMock
 import pytest
-import numpy as np
+import numpy 
 from itertools import product
 from typing import List, Tuple
 

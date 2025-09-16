@@ -1,4 +1,3 @@
-import gc
 
 import torch
 from torch import nn
