@@ -1,8 +1,6 @@
 import logging
 import typing
 
-from feature_blocks.utility import get_spatial_element
-
 log = logging.getLogger(__name__)
 
 
@@ -15,6 +13,7 @@ def parse_path(path, reader_fn: typing.Callable | None = None):
 
     path_to_sdata.zarr::image_key
     """
+    from feature_blocks.utility import get_spatial_element
 
     if "::" in path:
         import spatialdata
