@@ -40,6 +40,15 @@ def extract(
 
     input_data = dask.array.from_zarr(input_zarr_path)
 
+    if segmentations is not None:
+        # Check if any segmentations are not valid
+        if not segmentations.is_valid.all():
+            log.warning(f"Invalid geometries detected in segmentations, attempting to make valid.")
+            # Use the buffer trick to make geometries valid
+            segmentations["geometry"] = segmentations["geometry"].buffer(0)
+
+            assert segmentations.is_valid.all(), f"Unable to make segmentation geometries valid using buffer trick."
+
     assert (
         input_data.ndim == 4
     ), f"Expected zarr store to have 4 dimensions (C, Z, H, W). Got {input_data.ndim }."
