@@ -174,6 +174,7 @@ class CellProfiler(nn.Module):
 
                 # Convert result dict to feature arrays
                 for feature_name, feature_values in result.items():
+                    assert len(feature_values) == 1, "Multiple masks processed, expected one."
                     if isinstance(feature_values, numpy.ndarray):
                         # Take mean across all objects for this feature
                         mean_value = numpy.nanmean(feature_values)
