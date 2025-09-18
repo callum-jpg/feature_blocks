@@ -73,6 +73,7 @@ def load_and_process_image(config: dict) -> Path:
     zarr_path = (
         input_path.parent
         / FeatureBlockConstants.FEATURE_BLOCK_CACHE_DIR
+        / input_path.stem
         / FeatureBlockConstants.ZARR_IMAGE_NAME
     )
 
