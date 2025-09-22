@@ -51,7 +51,7 @@ class CellProfiler(nn.Module):
         self.measurements = get_core_measurements()
 
         # Model attributes required by feature_blocks
-        self.n_features = 271  # Total features across all measurement types
+        self.n_features = len(self.measurements)  # Total features across all measurement types
         self.output_shape = (self.n_features, 1, 1, 1)  # (C, Z, H, W)
 
         # Store feature names for reference
@@ -102,7 +102,7 @@ class CellProfiler(nn.Module):
 
         return image
 
-    def forward(self, x):
+    def forward(self, x, postprocess: bool = True):
         """
         Extract CellProfiler features from a segmented image block.
 
@@ -111,6 +111,7 @@ class CellProfiler(nn.Module):
                - C channels should include both image data and segmentation mask
                - The last channel is expected to be the segmentation mask
                - Other channels are the image data
+            postprocess: Whether to apply pycytominer postprocessing to features
 
         Returns:
             numpy.ndarray: Feature vector of shape (n_features, 1, 1, 1)
@@ -216,11 +217,54 @@ class CellProfiler(nn.Module):
                 # Truncate
                 all_features = all_features[: self.n_features]
 
-        # Convert to numpy array with correct shape
+        # Convert to numpy array
         features = numpy.array(all_features, dtype=numpy.float32)
+
+        if postprocess:
+            features = self.postprocess(features)
+
         features = features.reshape(self.n_features, 1, 1, 1)
 
         return features
+
+    def postprocess(self, features):
+        """Perform feature normalisation and feature selection
+        of CellProfiler features"""
+
+        try:
+            import pycytominer
+        except ImportError:
+            raise ImportError(
+                "pycytominer is required for CellProfiler.postprocess_features(). "
+                "Install with: pip install pycytominer"
+            )
+
+        import pandas
+
+        cellprofiler_features = pandas.DataFrame(
+            features, columns=self.feature_names
+        )
+
+        # Pycytominer requires a metadata column
+        cellprofiler_features["meta"] = None
+
+        cellprofiler_features = pycytominer.normalize(
+            profiles=cellprofiler_features,
+            method="standardize",
+            features=self.feature_names,
+            meta_features=["meta"],
+        )
+
+        cellprofiler_features = pycytominer.feature_select(
+            profiles=cellprofiler_features,
+            features=self.feature_names,
+        )
+
+        # Drop the meta column
+        cellprofiler_features = cellprofiler_features.drop(["meta"], axis=1)
+
+        return cellprofiler_features.to_numpy()
+        
 
     @property
     def feature_names(self):
