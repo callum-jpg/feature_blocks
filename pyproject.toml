@@ -33,6 +33,7 @@ dependencies = [
     "spatialdata==0.4.0",
     "rasterio",
     "cp-measure",
+    "pycytominer",
 ]
 
 [project.scripts]
