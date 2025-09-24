@@ -1,6 +1,7 @@
 import logging
 
 import numpy
+import pandas
 import skimage.color
 import torch
 from torch import nn
@@ -9,11 +10,16 @@ log = logging.getLogger(__name__)
 
 try:
     from cp_measure.bulk import get_core_measurements
-
-    CP_MEASURE_AVAILABLE = True
 except ImportError:
-    CP_MEASURE_AVAILABLE = False
     log.warning("cp_measure not available. Install with: pip install cp-measure")
+
+try:
+    import pycytominer
+except ImportError:
+    raise ImportError(
+        "pycytominer is required for CellProfiler.postprocess_features(). "
+        "Install with: pip install pycytominer"
+    )
 
 
 class CellProfiler(nn.Module):
@@ -41,17 +47,11 @@ class CellProfiler(nn.Module):
     def __init__(self):
         super().__init__()
 
-        if not CP_MEASURE_AVAILABLE:
-            raise ImportError(
-                "cp_measure is required for CellProfiler features. "
-                "Install with: pip install cp-measure"
-            )
-
         # Initialize cp_measure functions
         self.measurements = get_core_measurements()
 
         # Model attributes required by feature_blocks
-        self.n_features = len(self.measurements)  # Total features across all measurement types
+        self.n_features = 271  # Total features across all measurement types
         self.output_shape = (self.n_features, 1, 1, 1)  # (C, Z, H, W)
 
         # Store feature names for reference
@@ -102,16 +102,15 @@ class CellProfiler(nn.Module):
 
         return image
 
-    def forward(self, x, postprocess: bool = True):
+    def forward(self, x):
         """
         Extract CellProfiler features from a segmented image block.
 
         Args:
             x: Input tensor of shape (C, Z, H, W) where:
-               - C channels should include both image data and segmentation mask
+               - C channels should include both image data (0 to -1th) and segmentation mask (-1th)
                - The last channel is expected to be the segmentation mask
                - Other channels are the image data
-            postprocess: Whether to apply pycytominer postprocessing to features
 
         Returns:
             numpy.ndarray: Feature vector of shape (n_features, 1, 1, 1)
@@ -220,9 +219,6 @@ class CellProfiler(nn.Module):
         # Convert to numpy array
         features = numpy.array(all_features, dtype=numpy.float32)
 
-        if postprocess:
-            features = self.postprocess(features)
-
         features = features.reshape(self.n_features, 1, 1, 1)
 
         return features
@@ -230,16 +226,6 @@ class CellProfiler(nn.Module):
     def postprocess(self, features):
         """Perform feature normalisation and feature selection
         of CellProfiler features"""
-
-        try:
-            import pycytominer
-        except ImportError:
-            raise ImportError(
-                "pycytominer is required for CellProfiler.postprocess_features(). "
-                "Install with: pip install pycytominer"
-            )
-
-        import pandas
 
         cellprofiler_features = pandas.DataFrame(
             features, columns=self.feature_names
@@ -264,7 +250,13 @@ class CellProfiler(nn.Module):
         cellprofiler_features = cellprofiler_features.drop(["meta"], axis=1)
 
         return cellprofiler_features.to_numpy()
-        
+
+    def add_to_sdata(self, sdata, features, obsm_key: str = "cellprofiler_features", table_key: str = "table"):
+        features = self.process(features)
+
+        sdata[table_key].obsm[obsm_key] = features
+
+        return sdata
 
     @property
     def feature_names(self):
