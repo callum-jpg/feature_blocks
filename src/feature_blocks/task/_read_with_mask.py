@@ -38,6 +38,10 @@ def read_with_mask(input_zarr_path, region_with_mask, mask_store_path):
     # Read image data
     image_data = z[slice_obj]  # Shape: (C, Z, H, W)
 
+    # If image_data is a Dask array (from OME-Zarr), compute it
+    if hasattr(image_data, 'compute'):
+        image_data = image_data.compute()
+
     # Load mask data from zarr store
     mask_data = mask_store[mask_index]  # Shape: (H, W)
 

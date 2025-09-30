@@ -33,7 +33,13 @@ def read(input_zarr_path, region):
 
     if len(region) == 4:
         # Read a block
-        return z[region]
+        data = z[region]
     elif len(region) == 2:
         # Read a ROI
-        return z[region[1:]]
+        data = z[region[1:]]
+
+    # If data is a Dask array (from OME-Zarr Reader), compute it to numpy
+    if hasattr(data, 'compute'):
+        data = data.compute()
+
+    return data
