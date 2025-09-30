@@ -34,6 +34,7 @@ dependencies = [
     "rasterio",
     "cp-measure",
     "pycytominer",
+    "toml",
 ]
 
 [project.scripts]
