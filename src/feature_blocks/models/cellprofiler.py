@@ -252,7 +252,8 @@ class CellProfiler(nn.Module):
         return cellprofiler_features.to_numpy()
 
     def add_to_sdata(self, sdata, features, obsm_key: str = "cellprofiler_features", table_key: str = "table"):
-        features = self.process(features)
+        
+        features = self.postprocess(features)
 
         sdata[table_key].obsm[obsm_key] = features
 
