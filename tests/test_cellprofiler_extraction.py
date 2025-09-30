@@ -362,3 +362,133 @@ class TestCellProfilerExtraction:
 
         # Should match number of segmentations and features
         assert results.shape == (len(segmentations), 271)
+
+    def test_cellprofiler_bounding_box_mode_initialization(self):
+        """Test that CellProfiler initializes correctly in bounding box mode"""
+        model = CellProfiler(use_bounding_box=True)
+
+        assert model.n_features == 271
+        assert model.output_shape == (271, 1, 1, 1)
+        assert model.use_bounding_box is True
+        assert model.feature_names is not None
+
+    def test_cellprofiler_bounding_box_inference(self):
+        """Test CellProfiler inference in bounding box mode (no mask channel needed)"""
+        model = CellProfiler(use_bounding_box=True)
+
+        # Create image data WITHOUT mask channel (just RGB)
+        image_data = numpy.random.rand(3, 1, 64, 64).astype(numpy.float32)
+
+        # Add a bright region in center to ensure features are meaningful
+        image_data[:, 0, 20:44, 20:44] = 0.8
+
+        # Run inference - should work without mask channel
+        features = model(image_data)
+
+        # Validate output
+        assert features.shape == (271, 1, 1, 1)
+        assert not numpy.all(numpy.isnan(features))
+
+        # Should have meaningful features
+        non_zero_features = numpy.sum(features != 0)
+        assert non_zero_features > 50
+
+    def test_cellprofiler_bounding_box_vs_mask_mode(self):
+        """Compare bounding box mode vs mask mode output structure"""
+        bbox_model = CellProfiler(use_bounding_box=True)
+        mask_model = CellProfiler(use_bounding_box=False)
+
+        # Create image data
+        image_data = numpy.random.rand(3, 1, 64, 64).astype(numpy.float32)
+        image_data[:, 0, 20:44, 20:44] = 0.8
+
+        # Bounding box mode: just image
+        bbox_features = bbox_model(image_data)
+
+        # Mask mode: image + mask
+        mask_data = numpy.zeros((1, 1, 64, 64), dtype=numpy.float32)
+        mask_data[0, 0, 20:44, 20:44] = 1.0
+        combined_data = numpy.concatenate([image_data, mask_data], axis=0)
+        mask_features = mask_model(combined_data)
+
+        # Both should produce valid feature vectors
+        assert bbox_features.shape == (271, 1, 1, 1)
+        assert mask_features.shape == (271, 1, 1, 1)
+        assert not numpy.all(numpy.isnan(bbox_features))
+        assert not numpy.all(numpy.isnan(mask_features))
+
+        # Features should be different (mask mode is more precise)
+        # But both should have reasonable values
+        assert not numpy.allclose(bbox_features, mask_features)
+
+    def test_cellprofiler_bounding_box_extraction_pipeline(self, temp_dir, synthetic_image, synthetic_segmentations):
+        """Test full extraction pipeline with CellProfiler in bounding box mode"""
+        image_path, _ = synthetic_image
+        seg_path, gdf = synthetic_segmentations
+
+        # Create model in bounding box mode
+        model = CellProfiler(use_bounding_box=True)
+        output_path = os.path.join(temp_dir, 'cellprofiler_bbox_features.zarr')
+
+        # Run extraction
+        extract(
+            input_zarr_path=image_path,
+            feature_extraction_method=model,  # Pass model instance
+            block_size=128,
+            output_zarr_path=output_path,
+            n_workers=1,
+            python_path='python',
+            memory='4GB',
+            block_method='centroid',
+            segmentations=gdf,
+            calculate_mask=False,
+            image_downsample=1
+        )
+
+        # Verify output
+        assert os.path.exists(output_path)
+
+        # Load and validate results
+        output_zarr = zarr.open(output_path, mode='r')
+
+        # Should have features for 3 objects
+        assert output_zarr.shape[0] == 3
+        assert output_zarr.shape[1] == 271
+
+        # Check that features were extracted
+        features = output_zarr[:]
+        assert not numpy.all(numpy.isnan(features))
+
+        # Each object should have meaningful features
+        for i in range(3):
+            object_features = features[i, :]
+            non_nan_features = numpy.sum(~numpy.isnan(object_features))
+            assert non_nan_features > 200
+            non_zero_features = numpy.sum(object_features != 0)
+            assert non_zero_features > 50
+
+    def test_cellprofiler_bounding_box_no_mask_zarr_created(self, temp_dir, synthetic_image, synthetic_segmentations):
+        """Test that bounding box mode does NOT create mask zarr store"""
+        image_path, _ = synthetic_image
+        seg_path, gdf = synthetic_segmentations
+
+        model = CellProfiler(use_bounding_box=True)
+        output_path = os.path.join(temp_dir, 'cellprofiler_bbox_test.zarr')
+
+        # Run extraction
+        extract(
+            input_zarr_path=image_path,
+            feature_extraction_method=model,
+            block_size=128,
+            output_zarr_path=output_path,
+            n_workers=1,
+            block_method='centroid',
+            segmentations=gdf,
+        )
+
+        # Verify main output exists
+        assert os.path.exists(output_path)
+
+        # Verify mask zarr was NOT created (this is the key difference)
+        mask_path = f"{output_path}_masks.zarr"
+        assert not os.path.exists(mask_path), "Bounding box mode should not create mask zarr"

@@ -123,10 +123,12 @@ def run_dask_backend(
 
         def warmup_model(model_name):
             """Load model into worker's local cache."""
-            from feature_blocks.task import infer
             # This will initialize the model in the worker's _model_cache
             # We use a dummy input just to trigger model loading
             import numpy
+
+            from feature_blocks.task import infer
+
             dummy_input = numpy.zeros((1, 1, 1, 1), dtype=numpy.float32)
             try:
                 infer(dummy_input, model_name)

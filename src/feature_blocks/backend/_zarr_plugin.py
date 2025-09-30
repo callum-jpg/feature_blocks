@@ -3,6 +3,7 @@
 import zarr
 from distributed.diagnostics.plugin import WorkerPlugin
 from ome_zarr.io import parse_url
+from ome_zarr.reader import Reader
 
 
 class ZarrStorePlugin(WorkerPlugin):
@@ -40,21 +41,27 @@ class ZarrStorePlugin(WorkerPlugin):
         """
         # Open input store - try OME-Zarr first, fall back to regular zarr
         try:
-            store = parse_url(self.input_zarr_path, mode="r").store
-            root = zarr.group(store=store)
-            self.input_store = root["0"]  # OME-Zarr full-resolution data
-        except (KeyError, AttributeError):
+            store = parse_url(self.input_zarr_path, mode="r")
+            reader = Reader(store)
+            nodes = list(reader())
+            self.input_store = nodes[0].data[0]  # First node, first resolution level
+        except (KeyError, AttributeError, IndexError, TypeError):
             # Not OME-Zarr format, open as regular zarr
-            self.input_store = zarr.open(self.input_zarr_path, mode='r')
+            self.input_store = zarr.open(self.input_zarr_path, mode="r")
 
-        # Open output store - always OME-Zarr format
-        store = parse_url(self.output_zarr_path, mode="r+").store
-        root = zarr.group(store=store)
-        self.output_store = root["0"]  # OME-Zarr full-resolution data
+        # Open output store - try OME-Zarr (for 4D blocks), fall back to regular zarr (for 2D centroids)
+        try:
+            store = parse_url(self.output_zarr_path, mode="r+")
+            reader = Reader(store)
+            nodes = list(reader())
+            self.output_store = nodes[0].data[0]  # First node, first resolution level
+        except (KeyError, AttributeError, IndexError, TypeError):
+            # Not OME-Zarr, open as regular zarr
+            self.output_store = zarr.open(self.output_zarr_path, mode="r+")
 
         # Open mask store if provided (regular zarr format)
         if self.mask_store_path is not None:
-            self.mask_store = zarr.open(self.mask_store_path, mode='r')
+            self.mask_store = zarr.open(self.mask_store_path, mode="r")
 
         # Store in worker's state for easy access
         worker.input_zarr = self.input_store

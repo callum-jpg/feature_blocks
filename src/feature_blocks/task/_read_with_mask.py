@@ -21,19 +21,19 @@ def read_with_mask(input_zarr_path, region_with_mask, mask_store_path):
     # Try to use cached zarr stores from worker plugin
     try:
         worker = get_worker()
-        if hasattr(worker, 'input_zarr'):
+        if hasattr(worker, "input_zarr"):
             z = worker.input_zarr
         else:
-            z = zarr.open(input_zarr_path, mode='r')
+            z = zarr.open(input_zarr_path, mode="r")
 
-        if hasattr(worker, 'mask_zarr'):
+        if hasattr(worker, "mask_zarr"):
             mask_store = worker.mask_zarr
         else:
-            mask_store = zarr.open(mask_store_path, mode='r')
+            mask_store = zarr.open(mask_store_path, mode="r")
     except (ValueError, AttributeError):
         # Not in a Dask worker context, open directly
-        z = zarr.open(input_zarr_path, mode='r')
-        mask_store = zarr.open(mask_store_path, mode='r')
+        z = zarr.open(input_zarr_path, mode="r")
+        mask_store = zarr.open(mask_store_path, mode="r")
 
     # Read image data
     image_data = z[slice_obj]  # Shape: (C, Z, H, W)

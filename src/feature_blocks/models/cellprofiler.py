@@ -31,6 +31,10 @@ class CellProfiler(nn.Module):
     to work with the centroid-based block method where segmentations define
     the regions of interest.
 
+    Supports two modes:
+    - mask_based (default): Uses provided segmentation masks for feature extraction
+    - bounding_box: Uses a bounding box region
+
     Features extracted include:
     - Radial distribution (12 features)
     - Radial Zernike moments (60 features)
@@ -44,8 +48,17 @@ class CellProfiler(nn.Module):
     Total: 271 features per object
     """
 
-    def __init__(self):
+    def __init__(self, use_bounding_box: bool = False):
+        """
+        Initialize CellProfiler feature extractor.
+
+        Args:
+            use_bounding_box: If True, use bounding box region instead of mask.
+                            This is useful for extracting features from square regions
+                            centered on cell centroids.
+        """
         super().__init__()
+        self.use_bounding_box = use_bounding_box
 
         # Initialize cp_measure functions
         self.measurements = get_core_measurements()
@@ -108,9 +121,8 @@ class CellProfiler(nn.Module):
 
         Args:
             x: Input tensor of shape (C, Z, H, W) where:
-               - C channels should include both image data (0 to -1th) and segmentation mask (-1th)
-               - The last channel is expected to be the segmentation mask
-               - Other channels are the image data
+               - If use_bounding_box=False: Last channel is segmentation mask
+               - If use_bounding_box=True: All channels are image data, entire region is used
 
         Returns:
             numpy.ndarray: Feature vector of shape (n_features, 1, 1, 1)
@@ -128,13 +140,23 @@ class CellProfiler(nn.Module):
         if x.ndim != 4:
             raise ValueError(f"Expected 4D input (C, Z, H, W), got {x.ndim}D")
 
-        if x.shape[0] < 2:
-            raise ValueError("Need at least 2 channels: image data + segmentation mask")
+        if self.use_bounding_box:
+            # Bounding box mode: use entire region, all channels are image data
+            image_channels = x
+            # Create a mask covering the entire region (all pixels labeled as object 1)
+            h, w = x.shape[2], x.shape[3]
+            mask = numpy.ones((h, w), dtype=numpy.int32)
+        else:
+            # Mask mode: last channel is segmentation mask
+            if x.shape[0] < 2:
+                raise ValueError(
+                    "Need at least 2 channels: image data + segmentation mask"
+                )
 
-        # Extract image and mask
-        # Assume last channel is segmentation mask, others are image channels
-        image_channels = x[:-1]  # All but last channel
-        mask = x[-1, 0]  # Last channel, first Z slice (segmentation mask)
+            # Extract image and mask
+            # Assume last channel is segmentation mask, others are image channels
+            image_channels = x[:-1]  # All but last channel
+            mask = x[-1, 0]  # Last channel, first Z slice (segmentation mask)
 
         # Convert to grayscale
         if image_channels.shape[0] > 1:
@@ -174,7 +196,9 @@ class CellProfiler(nn.Module):
 
                 # Convert result dict to feature arrays
                 for feature_name, feature_values in result.items():
-                    assert len(feature_values) == 1, "Multiple masks processed, expected one."
+                    assert (
+                        len(feature_values) == 1
+                    ), "Multiple masks processed, expected one."
                     if isinstance(feature_values, numpy.ndarray):
                         # Take mean across all objects for this feature
                         mean_value = numpy.nanmean(feature_values)
@@ -227,9 +251,7 @@ class CellProfiler(nn.Module):
         """Perform feature normalisation and feature selection
         of CellProfiler features"""
 
-        cellprofiler_features = pandas.DataFrame(
-            features, columns=self.feature_names
-        )
+        cellprofiler_features = pandas.DataFrame(features, columns=self.feature_names)
 
         # Pycytominer requires a metadata column
         cellprofiler_features["meta"] = None
@@ -251,8 +273,14 @@ class CellProfiler(nn.Module):
 
         return cellprofiler_features.to_numpy()
 
-    def add_to_sdata(self, sdata, features, obsm_key: str = "cellprofiler_features", table_key: str = "table"):
-        
+    def add_to_sdata(
+        self,
+        sdata,
+        features,
+        obsm_key: str = "cellprofiler_features",
+        table_key: str = "table",
+    ):
+
         features = self.postprocess(features)
 
         sdata[table_key].obsm[obsm_key] = features

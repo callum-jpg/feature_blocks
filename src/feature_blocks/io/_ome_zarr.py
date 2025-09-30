@@ -6,7 +6,6 @@ import numpy
 import zarr
 from ome_zarr.format import CurrentFormat
 from ome_zarr.io import parse_url
-from ome_zarr.writer import write_image
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +44,9 @@ def create_ome_zarr_output(
         if len(shape) == 4:
             axes = ["c", "z", "y", "x"]
         elif len(shape) == 2:
-            axes = ["observation", "feature"]
+            # For 2D feature data, treat as 1D spatial + channels
+            # OME-Zarr requires at least one spatial axis
+            axes = ["y", "c"]  # y (observations as spatial dimension), c (features)
         else:
             axes = [f"axis_{i}" for i in range(len(shape))]
 
@@ -77,12 +78,22 @@ def create_ome_zarr_output(
     coordinate_transformations = [[{"type": "identity"}]]
 
     # Write the multiscales metadata
+    # Map axis names to OME-Zarr types (space, time, or channel)
+    axis_type_map = {
+        "x": "space",
+        "y": "space",
+        "z": "space",
+        "c": "channel",
+        "t": "time",
+    }
+
     multiscales = [
         {
             "version": fmt.version,
             "name": "features",
-            "axes": [{"name": ax, "type": "space" if ax in ["x", "y", "z"] else "channel" if ax == "c" else "custom"}
-                     for ax in axes],
+            "axes": [
+                {"name": ax, "type": axis_type_map.get(ax, "space")} for ax in axes
+            ],
             "datasets": [
                 {
                     "path": "0",

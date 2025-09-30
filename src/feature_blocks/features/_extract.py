@@ -8,6 +8,7 @@ import dask.array
 import numpy
 import skimage
 import zarr
+from tqdm import tqdm
 
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.image import tissue_detection
@@ -41,11 +42,15 @@ def extract(
     if segmentations is not None:
         # Check if any segmentations are not valid
         if not segmentations.is_valid.all():
-            log.warning(f"Invalid geometries detected in segmentations, attempting to make valid.")
+            log.warning(
+                "Invalid geometries detected in segmentations, attempting to make valid."
+            )
             # Use the buffer trick to make geometries valid
             segmentations["geometry"] = segmentations["geometry"].buffer(0)
 
-            assert segmentations.is_valid.all(), f"Unable to make segmentation geometries valid using buffer trick."
+            assert (
+                segmentations.is_valid.all()
+            ), "Unable to make segmentation geometries valid using buffer trick."
 
     assert (
         input_data.ndim == 4
@@ -112,44 +117,67 @@ def extract(
         )
 
         if is_cellprofiler:
-            # Use the specialized function that includes mask data for each segmentation
-            regions_with_masks = generate_centroid_slices_with_single_masks(
-                input_data.shape, size=block_size, segmentations=segmentations
-            )
+            # Check if CellProfiler is using bounding box mode
+            use_bounding_box = getattr(feature_extract_fn, "use_bounding_box", False)
 
-            # Store masks in a temporary zarr to avoid embedding them in the Dask graph
-            # This prevents massive graph sizes (10+ GB) for whole slide images
-            mask_store_path = f"{output_zarr_path}_masks.zarr"
-            log.info(f"Storing {len(regions_with_masks)} masks to temporary zarr: {mask_store_path}")
+            if use_bounding_box:
+                # Bounding box mode: use standard centroid slices (like ViT)
+                log.info(
+                    "CellProfiler in bounding box mode - using centroid regions without masks"
+                )
+                regions = generate_centroid_slices(
+                    input_data.shape, size=block_size, segmentations=segmentations
+                )
+                mask_store_path = None
+            else:
+                # Mask mode: use mask data for each segmentation
+                log.info(
+                    "CellProfiler in mask mode - generating masks for each segmentation"
+                )
+                regions_with_masks = generate_centroid_slices_with_single_masks(
+                    input_data.shape, size=block_size, segmentations=segmentations
+                )
 
-            # Extract mask data and create regions list without masks
-            regions = []
-            mask_shapes = []
-            for idx, (centroid_id, slc, mask_data) in enumerate(regions_with_masks):
-                regions.append((centroid_id, slc, idx))  # Store index instead of mask_data
-                mask_shapes.append(mask_data.shape)
+                # Store masks in a temporary zarr to avoid embedding them in the Dask graph
+                mask_store_path = f"{output_zarr_path}_masks.zarr"
+                log.info(
+                    f"Storing {len(regions_with_masks)} masks to temporary zarr: {mask_store_path}"
+                )
 
-            # Find max mask shape to create uniform zarr array
-            max_h = max(shape[0] for shape in mask_shapes)
-            max_w = max(shape[1] for shape in mask_shapes)
+                # Extract mask data and create regions list without masks
+                regions = []
+                mask_shapes = []
+                for idx, (centroid_id, slc, mask_data) in enumerate(regions_with_masks):
+                    regions.append(
+                        (centroid_id, slc, idx)
+                    )  # Store index instead of mask_data
+                    mask_shapes.append(mask_data.shape)
 
-            # Create mask zarr store
-            mask_store = zarr.create(
-                shape=(len(regions_with_masks), max_h, max_w),
-                chunks=(1, max_h, max_w),
-                dtype=numpy.int32,
-                store=mask_store_path,
-                overwrite=True,
-                fill_value=0,
-                compressor=zarr.Blosc(cname="zstd", clevel=1),
-            )
+                # Find max mask shape to create uniform zarr array
+                max_h = max(shape[0] for shape in mask_shapes)
+                max_w = max(shape[1] for shape in mask_shapes)
 
-            # Write all masks to zarr
-            for idx, (_, _, mask_data) in enumerate(regions_with_masks):
-                h, w = mask_data.shape
-                mask_store[idx, :h, :w] = mask_data
+                # Create mask zarr store
+                mask_store = zarr.create(
+                    shape=(len(regions_with_masks), max_h, max_w),
+                    chunks=(1, max_h, max_w),
+                    dtype=numpy.int32,
+                    store=mask_store_path,
+                    overwrite=True,
+                    fill_value=0,
+                    compressor=zarr.Blosc(cname="zstd", clevel=1),
+                )
 
-            log.info(f"Masks stored successfully")
+                # Write all masks to zarr
+                for idx, (_, _, mask_data) in tqdm(
+                    enumerate(regions_with_masks),
+                    total=len(regions_with_masks),
+                    desc="Writing masks to zarr...",
+                ):
+                    h, w = mask_data.shape
+                    mask_store[idx, :h, :w] = mask_data
+
+                log.info("Masks stored successfully")
         else:
             # Use the standard centroid slices without mask data
             regions = generate_centroid_slices(
@@ -163,21 +191,19 @@ def extract(
 
         # Prepare output zarr file with synchronizer for safe parallel writes
         # and compression to reduce I/O bottleneck
-        # Use OME-Zarr format for cloud-optimized storage
+        # Use regular Zarr for tabular feature data (observations x features)
         synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
         compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
 
-        from feature_blocks.io import create_ome_zarr_output
-
-        output_data = create_ome_zarr_output(
-            output_zarr_path=output_zarr_path,
+        output_data = zarr.create(
             shape=output_shape,
             chunks=output_chunks,
             dtype=numpy.float32,
-            axes=["observation", "feature"],
-            compressor=compressor,
-            synchronizer=synchronizer,
+            store=output_zarr_path,
+            overwrite=True,
             fill_value=numpy.nan,
+            synchronizer=synchronizer,
+            compressor=compressor,
         )
     else:
         raise ValueError(f"block_method '{block_method}' not recognised.")
@@ -214,10 +240,9 @@ def extract(
         # If a callable was passed directly, use it (less efficient but supported)
         model_identifier = feature_extract_fn
 
-    # Create delayed tasks directly without multiprocessing
-    # This allows Dask to distribute the task creation itself
+    # Create delayed tasks
     tasks = []
-    for reg in regions:
+    for reg in tqdm(regions, total=len(regions), desc="Creating Dask tasks..."):
         task = process_region(
             reg,
             input_zarr_path,
@@ -286,9 +311,7 @@ def process_region(
     # Block method is being used
     if len(reg) == 4:
         delayed_chunk = dask.delayed(read)(input_zarr_path, reg)
-        delayed_result = dask.delayed(infer, pure=True)(
-            delayed_chunk, model_identifier
-        )
+        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, model_identifier)
         # Build where the new region will be in the output zarr
         # (n_features, 1, H, W)
         new_region = [
@@ -309,9 +332,7 @@ def process_region(
 
         delayed_chunk = dask.delayed(read)(input_zarr_path, chunk_slices)
 
-        delayed_result = dask.delayed(infer, pure=True)(
-            delayed_chunk, model_identifier
-        )
+        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, model_identifier)
 
         new_region = [
             chunk_id,
@@ -332,9 +353,7 @@ def process_region(
             input_zarr_path, (chunk_id, chunk_slices, mask_index), mask_store_path
         )
 
-        delayed_result = dask.delayed(infer, pure=True)(
-            delayed_chunk, model_identifier
-        )
+        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, model_identifier)
 
         new_region = [
             chunk_id,
