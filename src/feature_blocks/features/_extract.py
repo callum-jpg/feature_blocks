@@ -1,6 +1,5 @@
 import logging
 import math
-import multiprocessing
 import time
 import typing
 from datetime import timedelta
@@ -9,7 +8,6 @@ import dask.array
 import numpy
 import skimage
 import zarr
-from tqdm import tqdm
 
 from feature_blocks.backend import run_dask_backend
 from feature_blocks.image import tissue_detection
@@ -84,10 +82,11 @@ def extract(
             num_chunks_x * output_chunks[3],
         )  # (C, Z, Y, X)
 
-        # Prepare output zarr file
-        # Optional parallel writing (I don't think we need this
-        # since there are no block overlaps/conflicts):
-        # https://zarr.readthedocs.io/en/v1.1.0/tutorial.html#parallel-computing-and-synchronization
+        # Prepare output zarr file with synchronizer for safe parallel writes
+        # and compression to reduce I/O bottleneck
+        synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
+        compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+
         output_data = zarr.create(
             shape=output_shape,
             chunks=output_chunks,
@@ -95,6 +94,8 @@ def extract(
             store=output_zarr_path,
             overwrite=True,
             fill_value=numpy.nan,  # Value to use for empty chunks
+            synchronizer=synchronizer,
+            compressor=compressor,
         )
 
     elif block_method.casefold() == "centroid":
@@ -119,6 +120,11 @@ def extract(
 
         output_chunks = (1, feature_extract_fn.n_features)
 
+        # Prepare output zarr file with synchronizer for safe parallel writes
+        # and compression to reduce I/O bottleneck
+        synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
+        compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+
         output_data = zarr.create(
             shape=output_shape,
             chunks=output_chunks,
@@ -126,6 +132,8 @@ def extract(
             store=output_zarr_path,
             overwrite=True,
             fill_value=numpy.nan,  # Value to use for empty chunks
+            synchronizer=synchronizer,
+            compressor=compressor,
         )
     else:
         raise ValueError(f"block_method '{block_method}' not recognised.")
@@ -153,33 +161,41 @@ def extract(
 
     # Create tasks. This is a list of delayed jobs to be run on the dask
     # backend
+    log.info(f"Creating delayed functions for {len(regions)} regions...")
+
+    # Determine model identifier to pass (string if possible for efficiency)
+    if isinstance(feature_extraction_method, str):
+        model_identifier = feature_extraction_method
+    else:
+        # If a callable was passed directly, use it (less efficient but supported)
+        model_identifier = feature_extract_fn
+
+    # Create delayed tasks directly without multiprocessing
+    # This allows Dask to distribute the task creation itself
     tasks = []
-
-    log.info("Creating delayed functions...")
-
-    args_list = create_starmap_args(
-        regions,
-        input_zarr_path,
-        feature_extract_fn,
-        output_zarr_path,
-        block_size,
-        output_chunks,
-    )
-
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        tasks = list(
-            pool.starmap(
-                process_region,
-                tqdm(args_list, total=len(regions), desc="Processing regions"),
-            )
+    for reg in regions:
+        task = process_region(
+            reg,
+            input_zarr_path,
+            model_identifier,
+            feature_extract_fn.n_features,
+            output_zarr_path,
+            block_size,
+            output_chunks,
         )
+        tasks.append(task)
 
     start_time = time.time()
+
+    # Only pass model_identifier for warmup if it's a string (serializable)
+    warmup_model = model_identifier if isinstance(model_identifier, str) else None
+
     run_dask_backend(
         tasks,
         n_workers=n_workers,
         python_path=python_path,
         memory=memory,
+        model_identifier=warmup_model,
     )
     elapsed = time.time() - start_time
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
@@ -196,48 +212,37 @@ def get_model(model: typing.Callable | str) -> "torch.nn.Module":
     return model
 
 
-def create_starmap_args(
-    regions,
-    input_zarr_path,
-    feature_extract_fn,
-    output_zarr_path,
-    block_size,
-    output_chunks,
-):
-    """Create argument tuples for starmap"""
-    return [
-        (
-            reg,
-            input_zarr_path,
-            feature_extract_fn,
-            output_zarr_path,
-            block_size,
-            output_chunks,
-        )
-        for reg in regions
-    ]
-
-
 def process_region(
     reg,
     input_zarr_path,
-    feature_extract_fn,
+    model_identifier,
+    n_features,
     output_zarr_path,
     block_size,
     output_chunks,
 ):
-    """Process a single region - to be used with multiprocessing"""
+    """Process a single region - to be used with multiprocessing
+
+    Args:
+        reg: Region tuple (slices or with chunk_id/mask_data)
+        input_zarr_path: Path to input zarr
+        model_identifier: String model name (serialization-friendly) or callable
+        n_features: Number of features the model produces
+        output_zarr_path: Path to output zarr
+        block_size: Size of blocks
+        output_chunks: Output chunk shape
+    """
 
     # Block method is being used
     if len(reg) == 4:
         delayed_chunk = dask.delayed(read)(input_zarr_path, reg)
         delayed_result = dask.delayed(infer, pure=True)(
-            delayed_chunk, feature_extract_fn
+            delayed_chunk, model_identifier
         )
         # Build where the new region will be in the output zarr
         # (n_features, 1, H, W)
         new_region = [
-            slice(0, feature_extract_fn.n_features, None),
+            slice(0, n_features, None),
             slice(0, 1, None),
         ]
         # feature_blocks only supports square blocks, so we can infer that
@@ -245,7 +250,7 @@ def process_region(
         chunk_size = block_size // output_chunks[2]
         new_region.extend(normalize_slices(reg[-2:], chunk_size))
 
-        delayed_write = dask.delayed(write, pure=True)(
+        delayed_write = dask.delayed(write, pure=False)(
             output_zarr_path, delayed_result, new_region
         )
     # ROI method is being used (standard centroid)
@@ -255,15 +260,15 @@ def process_region(
         delayed_chunk = dask.delayed(read)(input_zarr_path, chunk_slices)
 
         delayed_result = dask.delayed(infer, pure=True)(
-            delayed_chunk, feature_extract_fn
+            delayed_chunk, model_identifier
         )
 
         new_region = [
             chunk_id,
-            slice(0, feature_extract_fn.n_features),
+            slice(0, n_features),
         ]
 
-        delayed_write = dask.delayed(write, pure=True)(
+        delayed_write = dask.delayed(write, pure=False)(
             output_zarr_path, delayed_result, new_region
         )
 
@@ -276,15 +281,15 @@ def process_region(
         delayed_chunk = dask.delayed(read_with_mask)(input_zarr_path, region_with_mask)
 
         delayed_result = dask.delayed(infer, pure=True)(
-            delayed_chunk, feature_extract_fn
+            delayed_chunk, model_identifier
         )
 
         new_region = [
             chunk_id,
-            slice(0, feature_extract_fn.n_features),
+            slice(0, n_features),
         ]
 
-        delayed_write = dask.delayed(write, pure=True)(
+        delayed_write = dask.delayed(write, pure=False)(
             output_zarr_path, delayed_result, new_region
         )
 

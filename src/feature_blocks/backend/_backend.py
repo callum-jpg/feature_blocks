@@ -38,6 +38,7 @@ def run_dask_backend(
     n_workers: int | None = None,
     python_path: str = "python",
     memory: str = "16GB",
+    model_identifier: str | None = None,
 ):
     if in_slurm():
         from dask_jobqueue import SLURMCluster
@@ -99,6 +100,31 @@ def run_dask_backend(
         )
 
     client = Client(cluster, asynchronous=False)
+
+    # Pre-load model on all workers to avoid redundant loading
+    if model_identifier is not None:
+        log.info(f"Pre-loading model '{model_identifier}' on all workers...")
+
+        def warmup_model(model_name):
+            """Load model into worker's local cache."""
+            from feature_blocks.task import infer
+            # This will initialize the model in the worker's _model_cache
+            # We use a dummy input just to trigger model loading
+            import numpy
+            dummy_input = numpy.zeros((1, 1, 1, 1), dtype=numpy.float32)
+            try:
+                infer(dummy_input, model_name)
+            except Exception:
+                # Some models may fail with dummy input, but the model
+                # will still be loaded into the cache
+                pass
+            return f"Model {model_name} loaded"
+
+        # Run warmup on all workers (use actual worker count from cluster)
+        actual_workers = len(client.scheduler_info()["workers"])
+        warmup_futures = client.map(warmup_model, [model_identifier] * actual_workers)
+        client.gather(warmup_futures)
+        log.info("Model pre-loading complete")
 
     with performance_report(filename="performance_report.html"):
         futures = client.compute(functions)

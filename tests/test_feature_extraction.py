@@ -1,4 +1,4 @@
-from feature_blocks.features._extract import get_model
+from feature_blocks.features import get_model
 import numpy
 
 def test_dummy_model_inference():
