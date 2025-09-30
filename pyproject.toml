@@ -35,6 +35,7 @@ dependencies = [
     "cp-measure",
     "pycytominer",
     "toml",
+    "ome-zarr",
 ]
 
 [project.scripts]
