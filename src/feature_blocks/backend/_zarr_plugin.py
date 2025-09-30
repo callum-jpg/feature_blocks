@@ -1,10 +1,11 @@
 """Worker plugin to cache Zarr stores and avoid repeated open/close operations."""
 
 import zarr
+from distributed.diagnostics.plugin import WorkerPlugin
 from ome_zarr.io import parse_url
 
 
-class ZarrStorePlugin:
+class ZarrStorePlugin(WorkerPlugin):
     """
     Dask worker plugin that opens and caches zarr stores once per worker.
 
