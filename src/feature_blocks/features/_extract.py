@@ -98,6 +98,9 @@ def extract(
             compressor=compressor,
         )
 
+        # No mask store needed for block method
+        mask_store_path = None
+
     elif block_method.casefold() == "centroid":
         # Check if this is a CellProfiler model that needs mask data
         is_cellprofiler = (
@@ -107,14 +110,49 @@ def extract(
 
         if is_cellprofiler:
             # Use the specialized function that includes mask data for each segmentation
-            regions = generate_centroid_slices_with_single_masks(
+            regions_with_masks = generate_centroid_slices_with_single_masks(
                 input_data.shape, size=block_size, segmentations=segmentations
             )
+
+            # Store masks in a temporary zarr to avoid embedding them in the Dask graph
+            # This prevents massive graph sizes (10+ GB) for whole slide images
+            mask_store_path = f"{output_zarr_path}_masks.zarr"
+            log.info(f"Storing {len(regions_with_masks)} masks to temporary zarr: {mask_store_path}")
+
+            # Extract mask data and create regions list without masks
+            regions = []
+            mask_shapes = []
+            for idx, (centroid_id, slc, mask_data) in enumerate(regions_with_masks):
+                regions.append((centroid_id, slc, idx))  # Store index instead of mask_data
+                mask_shapes.append(mask_data.shape)
+
+            # Find max mask shape to create uniform zarr array
+            max_h = max(shape[0] for shape in mask_shapes)
+            max_w = max(shape[1] for shape in mask_shapes)
+
+            # Create mask zarr store
+            mask_store = zarr.create(
+                shape=(len(regions_with_masks), max_h, max_w),
+                chunks=(1, max_h, max_w),
+                dtype=numpy.int32,
+                store=mask_store_path,
+                overwrite=True,
+                fill_value=0,
+                compressor=zarr.Blosc(cname="zstd", clevel=1),
+            )
+
+            # Write all masks to zarr
+            for idx, (_, _, mask_data) in enumerate(regions_with_masks):
+                h, w = mask_data.shape
+                mask_store[idx, :h, :w] = mask_data
+
+            log.info(f"Masks stored successfully")
         else:
             # Use the standard centroid slices without mask data
             regions = generate_centroid_slices(
                 input_data.shape, size=block_size, segmentations=segmentations
             )
+            mask_store_path = None
 
         output_shape = (len(regions), feature_extract_fn.n_features)
 
@@ -182,6 +220,7 @@ def extract(
             output_zarr_path,
             block_size,
             output_chunks,
+            mask_store_path,
         )
         tasks.append(task)
 
@@ -220,17 +259,19 @@ def process_region(
     output_zarr_path,
     block_size,
     output_chunks,
+    mask_store_path=None,
 ):
-    """Process a single region - to be used with multiprocessing
+    """Process a single region
 
     Args:
-        reg: Region tuple (slices or with chunk_id/mask_data)
+        reg: Region tuple (slices or with chunk_id/mask_index)
         input_zarr_path: Path to input zarr
         model_identifier: String model name (serialization-friendly) or callable
         n_features: Number of features the model produces
         output_zarr_path: Path to output zarr
         block_size: Size of blocks
         output_chunks: Output chunk shape
+        mask_store_path: Path to zarr store containing mask data (for CellProfiler)
     """
 
     # Block method is being used
@@ -272,13 +313,15 @@ def process_region(
             output_zarr_path, delayed_result, new_region
         )
 
-    # CellProfiler method with mask data (centroid + mask)
+    # CellProfiler method with mask index (centroid + mask)
     elif len(reg) == 3:
-        chunk_id, chunk_slices, mask_data = reg
+        chunk_id, chunk_slices, mask_index = reg
 
-        # Use the specialized read function that combines image and mask
-        region_with_mask = (chunk_id, chunk_slices, mask_data)
-        delayed_chunk = dask.delayed(read_with_mask)(input_zarr_path, region_with_mask)
+        # Load mask from zarr store instead of embedding in graph
+        # This is much more efficient for large numbers of segmentations
+        delayed_chunk = dask.delayed(read_with_mask)(
+            input_zarr_path, (chunk_id, chunk_slices, mask_index), mask_store_path
+        )
 
         delayed_result = dask.delayed(infer, pure=True)(
             delayed_chunk, model_identifier

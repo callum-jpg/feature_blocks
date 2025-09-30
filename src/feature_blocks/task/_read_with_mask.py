@@ -2,23 +2,28 @@ import numpy
 import zarr
 
 
-def read_with_mask(input_zarr_path, region_with_mask):
+def read_with_mask(input_zarr_path, region_with_mask, mask_store_path):
     """
-    Read image data from zarr and combine with pre-computed mask data.
+    Read image data from zarr and combine with mask data loaded from mask store.
 
     Args:
         input_zarr_path: Path to the zarr store containing image data
-        region_with_mask: Tuple of (centroid_id, slice_obj, mask_data)
+        region_with_mask: Tuple of (centroid_id, slice_obj, mask_index)
+        mask_store_path: Path to the zarr store containing mask data
 
     Returns:
         numpy.ndarray: Combined image+mask data with shape (C+1, Z, H, W)
                        where the last channel is the mask
     """
-    centroid_id, slice_obj, mask_data = region_with_mask
+    centroid_id, slice_obj, mask_index = region_with_mask
 
     # Read image data
     z = zarr.open(input_zarr_path)
     image_data = z[slice_obj]  # Shape: (C, Z, H, W)
+
+    # Load mask data from zarr store
+    mask_store = zarr.open(mask_store_path, mode='r')
+    mask_data = mask_store[mask_index]  # Shape: (H, W)
 
     # Ensure mask has the same spatial dimensions as image
     _, _, img_h, img_w = image_data.shape
