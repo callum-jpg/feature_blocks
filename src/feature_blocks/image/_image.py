@@ -64,7 +64,12 @@ def zarr_exists(zarr_path, new_array):
         return True
 
     try:
-        z = zarr.open(zarr_path, mode="r")
+        # Open as OME-Zarr format (data at path "0")
+        from ome_zarr.io import parse_url
+
+        store = parse_url(str(zarr_path), mode="r").store
+        root = zarr.open_group(store=store, mode="r")
+        z = root["0"]  # OME-Zarr data is at "0"
 
         # Compare shape
         if z.shape != new_array.shape:
@@ -74,8 +79,8 @@ def zarr_exists(zarr_path, new_array):
         if z.chunks != new_array.chunksize:
             return True
 
-        # Now check the content
-        existing = dask.array.from_zarr(zarr_path)
+        # Now check the content - load from OME-Zarr "0" component
+        existing = dask.array.from_zarr(str(zarr_path), component="0")
         if not dask.array.all(existing == new_array).compute():
             return True
 
