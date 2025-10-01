@@ -85,13 +85,17 @@ def run_dask_backend(
             log.info("Using CUDA cluster")
         except:
             n_workers = get_n_workers()
-            cluster = LocalCluster(n_workers=n_workers)
+            cluster = LocalCluster(
+                n_workers=n_workers,
+                threads_per_worker=1,
+                memory_limit=memory
+            )
             log.info("Using CPU cluster")
 
             if len(functions) < n_workers:
                 n_workers = len(functions)
 
-            log.info(f"Using {n_workers} n_workers")
+            log.info(f"Using {n_workers} n_workers with {memory} memory per worker")
 
     if visualise_graph:
         dask.visualize(
