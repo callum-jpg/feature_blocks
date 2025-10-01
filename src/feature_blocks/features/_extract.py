@@ -37,7 +37,10 @@ def extract(
     masked_block_value=numpy.nan,
 ):
 
-    input_data = dask.array.from_zarr(input_zarr_path)
+    # component=0 to read the high resolution image
+    # We mostly load input_data here to get it's shape. If required,
+    # it will be computed for mask creation.
+    input_data = dask.array.from_zarr(input_zarr_path, component=0)
 
     if segmentations is not None:
         # Check if any segmentations are not valid

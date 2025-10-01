@@ -13,6 +13,7 @@ import os
 
 from feature_blocks.features import extract
 from feature_blocks.models.cellprofiler import CellProfiler
+from feature_blocks.io import create_ome_zarr_output
 
 
 class TestCellProfilerExtraction:
@@ -62,8 +63,15 @@ class TestCellProfilerExtraction:
         image[2, 0, mask3] = 0.6  # Blue channel
 
         # Save as zarr
-        image_path = os.path.join(temp_dir, "synthetic_image.zarr")
-        zarr_store = zarr.open(image_path, mode='w', shape=image_shape, dtype=numpy.float32)
+        image_path = os.path.join(temp_dir, "synthetic_image2.zarr")
+        zarr_store = create_ome_zarr_output(
+                output_zarr_path=image_path,
+                shape=image_shape,
+                chunks=(1, 1, 256, 256),
+                dtype=numpy.float32,
+                axes=["c", "z", "y", "x"],
+                fill_value=0.0,
+            )
         zarr_store[:] = image
 
         return image_path, image

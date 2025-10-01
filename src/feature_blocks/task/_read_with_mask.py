@@ -1,6 +1,6 @@
 import numpy
 import zarr
-from dask.distributed import get_worker
+from ome_zarr.io import parse_url
 
 
 def read_with_mask(input_zarr_path, region_with_mask, mask_store_path):
@@ -18,29 +18,16 @@ def read_with_mask(input_zarr_path, region_with_mask, mask_store_path):
     """
     centroid_id, slice_obj, mask_index = region_with_mask
 
-    # Try to use cached zarr stores from worker plugin
-    try:
-        worker = get_worker()
-        if hasattr(worker, "input_zarr"):
-            z = worker.input_zarr
-        else:
-            z = zarr.open(input_zarr_path, mode="r")
+    # Open OME-Zarr store and read only the required chunk
+    store = parse_url(input_zarr_path, mode="r").store
+    root = zarr.open_group(store=store, mode="r")
+    z = root["0"]  # OME-Zarr data is at "0"
 
-        if hasattr(worker, "mask_zarr"):
-            mask_store = worker.mask_zarr
-        else:
-            mask_store = zarr.open(mask_store_path, mode="r")
-    except (ValueError, AttributeError):
-        # Not in a Dask worker context, open directly
-        z = zarr.open(input_zarr_path, mode="r")
-        mask_store = zarr.open(mask_store_path, mode="r")
+    # Open mask store and read only the required mask
+    mask_store = zarr.open(mask_store_path, mode="r")
 
     # Read image data
     image_data = z[slice_obj]  # Shape: (C, Z, H, W)
-
-    # If image_data is a Dask array (from OME-Zarr), compute it
-    if hasattr(image_data, 'compute'):
-        image_data = image_data.compute()
 
     # Load mask data from zarr store
     mask_data = mask_store[mask_index]  # Shape: (H, W)

@@ -104,19 +104,6 @@ def run_dask_backend(
 
     client = Client(cluster, asynchronous=False)
 
-    # Register zarr store plugin to avoid repeated open/close operations
-    if input_zarr_path is not None and output_zarr_path is not None:
-        log.info("Registering zarr store plugin on all workers...")
-        from feature_blocks.backend._zarr_plugin import ZarrStorePlugin
-
-        plugin = ZarrStorePlugin(
-            input_zarr_path=input_zarr_path,
-            output_zarr_path=output_zarr_path,
-            mask_store_path=mask_store_path,
-        )
-        client.register_plugin(plugin, name="zarr_store")
-        log.info("Zarr store plugin registered")
-
     # Pre-load model on all workers to avoid redundant loading
     if model_identifier is not None:
         log.info(f"Pre-loading model '{model_identifier}' on all workers...")
