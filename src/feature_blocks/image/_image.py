@@ -60,32 +60,28 @@ def standardise_image(image, dimension_order: tuple[str]):
 
 
 def zarr_exists(zarr_path, new_array):
+    """Check if OME-Zarr exists and has the same data as new_array."""
     if not os.path.exists(zarr_path):
         return True
 
-    try:
-        # Open as OME-Zarr format (data at path "0")
-        from ome_zarr.io import parse_url
+    from ome_zarr.io import parse_url
 
-        store = parse_url(str(zarr_path), mode="r").store
-        root = zarr.open_group(store=store, mode="r")
-        z = root["0"]  # OME-Zarr data is at "0"
+    # Open as OME-Zarr format (data at path "0")
+    store = parse_url(str(zarr_path), mode="r").store
+    root = zarr.open_group(store=store, mode="r")
+    z = root["0"]
 
-        # Compare shape
-        if z.shape != new_array.shape:
-            return True
+    # Compare shape
+    if z.shape != new_array.shape:
+        return True
 
-        # Compare chunks
-        if z.chunks != new_array.chunksize:
-            return True
+    # Compare chunks
+    if z.chunks != new_array.chunksize:
+        return True
 
-        # Now check the content - load from OME-Zarr "0" component
-        existing = dask.array.from_zarr(str(zarr_path), component="0")
-        if not dask.array.all(existing == new_array).compute():
-            return True
+    # Check the content - load from OME-Zarr "0" component
+    existing = dask.array.from_zarr(str(zarr_path), component="0")
+    if not dask.array.all(existing == new_array).compute():
+        return True
 
-        return False  # All checks passed, skip writing
-
-    except Exception as e:
-        log.info(f"Warning: failed to read existing Zarr. Overwriting. Reason: {e}")
-        return True  # If error reading, better to overwrite
+    return False  # All checks passed, skip writing

@@ -126,7 +126,7 @@ class TestCellProfilerExtraction:
             'calculate_mask': False,
             'n_workers': 1,  # Single worker for testing
             'python_path': 'python',
-            'memory': '4GB'
+            'memory': '8GB'
         }
 
         config_path = os.path.join(temp_dir, 'cellprofiler_config.toml')

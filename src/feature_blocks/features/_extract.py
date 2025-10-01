@@ -194,19 +194,21 @@ def extract(
 
         # Prepare output zarr file with synchronizer for safe parallel writes
         # and compression to reduce I/O bottleneck
-        # Use regular Zarr for tabular feature data (observations x features)
+        # Use OME-Zarr format for tabular feature data (observations x features)
         synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
         compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
 
-        output_data = zarr.create(
+        from feature_blocks.io import create_ome_zarr_output
+
+        output_data = create_ome_zarr_output(
+            output_zarr_path=output_zarr_path,
             shape=output_shape,
             chunks=output_chunks,
             dtype=numpy.float32,
-            store=output_zarr_path,
-            overwrite=True,
-            fill_value=numpy.nan,
-            synchronizer=synchronizer,
+            axes=["y", "c"],  # y (observations), c (features)
             compressor=compressor,
+            synchronizer=synchronizer,
+            fill_value=numpy.nan,
         )
     else:
         raise ValueError(f"block_method '{block_method}' not recognised.")
