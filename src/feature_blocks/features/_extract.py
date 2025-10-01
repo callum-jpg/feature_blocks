@@ -149,20 +149,20 @@ def extract(
 
                 # Extract mask data and create regions list without masks
                 regions = []
-                mask_shapes = []
+                masks = []
                 for idx, (centroid_id, slc, mask_data) in enumerate(regions_with_masks):
                     regions.append(
                         (centroid_id, slc, idx)
                     )  # Store index instead of mask_data
-                    mask_shapes.append(mask_data.shape)
+                    masks.append(mask_data)
 
                 # Find max mask shape to create uniform zarr array
-                max_h = max(shape[0] for shape in mask_shapes)
-                max_w = max(shape[1] for shape in mask_shapes)
+                max_h = max(mask.shape[0] for mask in masks)
+                max_w = max(mask.shape[1] for mask in masks)
 
                 # Create mask zarr store
                 mask_store = zarr.create(
-                    shape=(len(regions_with_masks), max_h, max_w),
+                    shape=(len(masks), max_h, max_w),
                     chunks=(1, max_h, max_w),
                     dtype=numpy.int32,
                     store=mask_store_path,
@@ -171,14 +171,17 @@ def extract(
                     compressor=zarr.Blosc(cname="zstd", clevel=1),
                 )
 
-                # Write all masks to zarr
-                for idx, (_, _, mask_data) in tqdm(
-                    enumerate(regions_with_masks),
-                    total=len(regions_with_masks),
-                    desc="Writing masks to zarr...",
-                ):
+                # Write all masks to zarr in parallel using numpy array operations
+                log.info("Writing masks to zarr in parallel...")
+
+                # Stack all masks into a single array with padding
+                padded_masks = numpy.zeros((len(masks), max_h, max_w), dtype=numpy.int32)
+                for idx, mask_data in enumerate(masks):
                     h, w = mask_data.shape
-                    mask_store[idx, :h, :w] = mask_data
+                    padded_masks[idx, :h, :w] = mask_data
+
+                # Single write operation - much faster than individual writes
+                mask_store[:] = padded_masks
 
                 log.info("Masks stored successfully")
         else:
