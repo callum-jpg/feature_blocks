@@ -149,7 +149,7 @@ def run_dask_backend(
             result = future.result(timeout=600)
 
             completed_count += 1
-            if completed_count % 100 == 0:  # Progress update every 100 functions
+            if completed_count % 1000 == 0:  # Progress update every 100 functions
                 print(f"Completed {completed_count}/{len(functions)} tasks")
 
         except Exception as e:
