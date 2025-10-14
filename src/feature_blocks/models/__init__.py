@@ -7,6 +7,7 @@ from .gigapath_tile_patch import GigaPathTilePatch as GigaPathTilePatch
 from .lbp import LBP as LBP
 from .phikon import PhikonV2 as PhikonV2
 from .phikon_patch import PhikonV2Patch as PhikonV2Patch
+from .h_optimus_0 import H_optimus_0 as H_optimus_0
 from .uni import UNI as UNI
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "UNI",
     "LBP",
     "lbp",
+    "h_optimus_0",
 ]
 
 available_models = {
@@ -35,4 +37,5 @@ available_models = {
     "uni": UNI,
     "LBP": LBP,
     "lbp": LBP,
+    "h_optimus_0": H_optimus_0,
 }
