@@ -1,6 +1,7 @@
 import torch
 import timm 
 from torchvision import transforms
+from torch import nn
 
 
 class H_optimus_0(nn.Module):
