@@ -1,0 +1,63 @@
+# Example configuration for CellProfiler feature extraction
+# This config demonstrates how to extract morphological and intensity features
+# from segmented regions using CellProfiler's feature set
+
+# Path to the image to run CellProfiler feature extraction on
+# If the image is not already a zarr, it will be converted and saved as one
+image_path = "path/to/your/image.ome.tiff"
+
+# Path to segmentations in polygon format that can be loaded with geopandas
+# Each polygon will be processed individually to extract features
+# Supports SpatialData zarr stores, where the segmentation GeoDataframe key is after ":::"
+# For example: /path/to/sdata.zarr:::segmentation_shapes_name
+segmentations = "/path/to/your/segmentations.geojson"
+
+# Provide information about dimension order
+image_dimension_order = ["c", "y", "x"]
+
+# Optional downsampling of the input image
+image_downsample = 1
+
+# Size of the window to extract around each segmentation centroid
+# Should be large enough to capture the entire object plus some context
+block_size = 128
+
+# Must use "centroid" method for CellProfiler - processes each segmentation individually
+block_method = "centroid"
+
+# CellProfiler feature extraction method
+# Extracts 271 morphological and intensity features per segmentation:
+# - Radial distribution (12 features)
+# - Radial Zernike moments (60 features)
+# - Intensity statistics (21 features)
+# - Size and shape (78 features)
+# - Zernike moments (30 features)
+# - Ferret diameter (2 features)
+# - Texture features (52 features)
+# - Granularity (16 features)
+feature_extraction_method = "cellprofiler"
+
+# Where to save the output features
+# Output will have shape (n_segmentations, 271)
+save_path = "/path/to/cellprofiler_features.zarr"
+
+# Control mask calculation - not needed for CellProfiler since segmentations define regions
+calculate_mask = false
+
+# Define the number of workers to use for distributed processing
+# Each worker will process multiple individual segmentations
+n_workers = 4
+
+# Add the python path each node should use
+python_path = "python"
+
+# Memory allocation per worker for cluster computing
+# CellProfiler feature extraction is lightweight but consider segmentation count
+memory = "8GB"
+
+# Notes:
+# - 3-channel images will be converted to grayscale using skimage.color.rgb2gray
+# - Multi-channel images (>3 channels) will use mean conversion
+# - Each segmentation polygon is processed independently
+# - Features are extracted from the masked region within each polygon
+# - Output features are averaged across all objects found within each segmentation mask
