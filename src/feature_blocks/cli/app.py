@@ -43,6 +43,7 @@ def extract(config_file: str):
         memory=config.get("memory", "16GB"),
         calculate_mask=config.get("calculate_mask"),
         image_downsample=config.get("image_downsample"),
+        manual_threshold=config.get("manual_threshold"),
     )
 
 
