@@ -34,8 +34,8 @@ def extract(
     segmentations: typing.Optional["geopandas.GeoDataFrame"] = None,
     calculate_mask: bool = False,
     image_downsample: int = 1,
-    manual_threshold: int = None,
     masked_block_value=numpy.nan,
+    masking_kwargs: typing.Dict[str, int] = None
 ):
 
     # component=0 to read the high resolution image
@@ -219,11 +219,13 @@ def extract(
 
     if calculate_mask:
         log.info("Calculating mask...")
+        if masking_kwargs:
+            log.info(f"Using masking kawrgs: {', '.join(f'{k}={v}' for k, v in masking_kwargs.items())}")
         mask = tissue_detection(
             input_data[:, 0, ::image_downsample, ::image_downsample]
             .compute()
             .transpose(1, 2, 0),
-            manual_threshold=manual_threshold,
+            **masking_kwargs
         )
         # Mask has shape (Y, X). Resize this to the input image
         mask = skimage.transform.resize(
