@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Callable
+import traceback
 
 import dask
 from dask.distributed import (Client, LocalCluster, as_completed,
@@ -153,8 +154,9 @@ def run_dask_backend(
                 print(f"Completed {completed_count}/{len(functions)} tasks")
 
         except Exception as e:
-            print(f"Task {i} failed: {e}")
-            failed_indices.append(i)
+            tb = traceback.extract_tb(e.__traceback__)
+            func_name = tb[-1].name  # the last function in the traceback (where it failed)
+            print(f"Task {i} failed in function '{func_name}': {e}.")
 
     print(f"Completed: {completed_count}, Failed: {len(failed_indices)}")
 
