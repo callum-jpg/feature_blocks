@@ -51,7 +51,7 @@ torch = [
   { index = "pytorch-cpu" },
 ]
 torchvision = [
-  { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
 ]
 
 [project.optional-dependencies]
