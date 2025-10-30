@@ -17,6 +17,7 @@ from feature_blocks.slice import (filter_slices_by_mask,
                                   generate_centroid_slices,
                                   generate_centroid_slices_with_single_masks,
                                   generate_nd_slices, normalize_slices)
+from feature_blocks.io import create_ome_zarr_output
 from feature_blocks.task import infer, read, read_with_mask, write
 
 log = logging.getLogger(__name__)
@@ -96,8 +97,6 @@ def extract(
         # Use OME-Zarr format for cloud-optimized storage
         synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
         compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
-
-        from feature_blocks.io import create_ome_zarr_output
 
         output_data = create_ome_zarr_output(
             output_zarr_path=output_zarr_path,
@@ -202,8 +201,6 @@ def extract(
         synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
         compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
 
-        from feature_blocks.io import create_ome_zarr_output
-
         output_data = create_ome_zarr_output(
             output_zarr_path=output_zarr_path,
             shape=output_shape,
@@ -221,6 +218,9 @@ def extract(
         log.info("Calculating mask...")
         if masking_kwargs:
             log.info(f"Using masking kawrgs: {', '.join(f'{k}={v}' for k, v in masking_kwargs.items())}")
+        else:
+            masking_kwargs = {}
+        
         mask = tissue_detection(
             input_data[:, 0, ::image_downsample, ::image_downsample]
             .compute()
