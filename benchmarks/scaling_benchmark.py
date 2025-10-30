@@ -15,6 +15,8 @@ import numpy as np
 import shutil
 import traceback
 import dask.array
+import tempfile
+import os
 
 from feature_blocks.features._extract import extract
 from utils import (
@@ -23,7 +25,7 @@ from utils import (
     MemoryTracker,
     estimate_n_chunks
 )
-from synthetic_data import create_test_scenario
+from synthetic_data import create_test_scenario, create_scaling_scenarios
 
 
 def benchmark_zarr_dask_extraction(
@@ -171,11 +173,12 @@ def run_scaling_benchmark(
 
     for scenario in scenarios:
         scenario_name = scenario["name"]
-        input_zarr = scenario["image_path"]
+        input_zarr = os.path.abspath(scenario["image_path"])
         image_size = scenario["image_size"]
 
         print(f"\n--- Scenario: {scenario_name} ---")
         print(f"Image size: {image_size}")
+        print(f"Input zarr: {input_zarr}")
 
         for n_workers in worker_counts:
             output_zarr = output_dir / f"{scenario_name}_w{n_workers}.zarr"
@@ -335,14 +338,17 @@ if __name__ == "__main__":
     # Example: Test worker scaling on medium-sized image
     print("Running worker scaling analysis...")
 
-    suite = run_worker_scaling_analysis(
-        image_size=(3, 1, 4096, 4096),
+    BLOCK_SIZE = 128
+
+    scenarios = create_scaling_scenarios(base_dir="./data/benchmarking", block_size=BLOCK_SIZE)
+
+    # Test with multiple worker counts
+    suite = run_scaling_benchmark(
+        scenarios=scenarios,
         model_name="dummy",
-        block_size=112,
-        max_workers=8
+        block_size=BLOCK_SIZE,
+        worker_counts=[8]
     )
 
-    print("\n" + suite.summary())
-
     # Save results
-    suite.save("benchmark_results_scaling.json")
+    suite.save("image_size_scaling_benchmark.json")
