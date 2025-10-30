@@ -176,6 +176,7 @@ def create_synthetic_segmentations(
 def create_test_scenario(
     name: str,
     image_size: Tuple[int, int, int, int],
+    block_size: int,
     n_regions: Optional[int] = None,
     base_dir: Optional[str] = None,
     seed: int = 42
@@ -193,11 +194,11 @@ def create_test_scenario(
     Returns:
         Dictionary with paths to created files
     """
-    if base_dir is None:
-        base_dir = tempfile.mkdtemp(prefix=f"benchmark_{name}_")
-    else:
-        base_dir = Path(base_dir) / name
-        base_dir.mkdir(parents=True, exist_ok=True)
+    # if base_dir is None:
+    #     base_dir = tempfile.mkdtemp(prefix=f"benchmark_{name}_")
+    # else:
+    base_dir = Path(base_dir) / name
+    base_dir.mkdir(parents=True, exist_ok=True)
 
     base_dir = Path(base_dir)
 
@@ -209,6 +210,7 @@ def create_test_scenario(
         str(image_path),
         image_size=image_size,
         pattern="random",
+        chunk_size=(image_size[0], image_size[1], block_size, block_size),
         seed=seed
     )
 
@@ -235,7 +237,7 @@ def create_test_scenario(
     return scenario
 
 
-def create_scaling_scenarios(base_dir: Optional[str] = None) -> List[dict]:
+def create_scaling_scenarios(block_size: int, base_dir: Optional[str] = None) -> List[dict]:
     """
     Create a suite of test scenarios for scaling benchmarks.
 
@@ -252,7 +254,8 @@ def create_scaling_scenarios(base_dir: Optional[str] = None) -> List[dict]:
         image_size=(3, 1, 512, 512),
         n_regions=10,
         base_dir=base_dir,
-        seed=42
+        seed=42,
+        block_size=block_size,
     ))
 
     scenarios.append(create_test_scenario(
@@ -260,7 +263,8 @@ def create_scaling_scenarios(base_dir: Optional[str] = None) -> List[dict]:
         image_size=(3, 1, 1024, 1024),
         n_regions=25,
         base_dir=base_dir,
-        seed=43
+        seed=43,
+        block_size=block_size,
     ))
 
     # Medium images (starting to benefit from chunking)
@@ -269,42 +273,47 @@ def create_scaling_scenarios(base_dir: Optional[str] = None) -> List[dict]:
         image_size=(3, 1, 2048, 2048),
         n_regions=100,
         base_dir=base_dir,
-        seed=44
+        seed=44,
+        block_size=block_size,
     ))
 
-    scenarios.append(create_test_scenario(
-        name="medium_4096",
-        image_size=(3, 1, 4096, 4096),
-        n_regions=256,
-        base_dir=base_dir,
-        seed=45
-    ))
+    # scenarios.append(create_test_scenario(
+    #     name="medium_4096",
+    #     image_size=(3, 1, 4096, 4096),
+    #     n_regions=256,
+    #     base_dir=base_dir,
+    #     seed=45,
+    #     block_size=block_size,
+    # ))
 
-    # Large images (zarr+dask should excel here)
-    scenarios.append(create_test_scenario(
-        name="large_8192",
-        image_size=(3, 1, 8192, 8192),
-        n_regions=500,
-        base_dir=base_dir,
-        seed=46
-    ))
+    # # Large images (zarr+dask should excel here)
+    # scenarios.append(create_test_scenario(
+    #     name="large_8192",
+    #     image_size=(3, 1, 8192, 8192),
+    #     n_regions=500,
+    #     base_dir=base_dir,
+    #     seed=46,
+    #     block_size=block_size,
+    # ))
 
-    scenarios.append(create_test_scenario(
-        name="large_16384",
-        image_size=(3, 1, 16384, 16384),
-        n_regions=1000,
-        base_dir=base_dir,
-        seed=47
-    ))
+    # scenarios.append(create_test_scenario(
+    #     name="large_16384",
+    #     image_size=(3, 1, 16384, 16384),
+    #     n_regions=1000,
+    #     base_dir=base_dir,
+    #     seed=47,
+    #     block_size=block_size,
+    # ))
 
-    # Very large (extreme case)
-    scenarios.append(create_test_scenario(
-        name="xlarge_32768",
-        image_size=(3, 1, 32768, 32768),
-        n_regions=2000,
-        base_dir=base_dir,
-        seed=48
-    ))
+    # # Very large (extreme case)
+    # scenarios.append(create_test_scenario(
+    #     name="xlarge_32768",
+    #     image_size=(3, 1, 32768, 32768),
+    #     n_regions=2000,
+    #     base_dir=base_dir,
+    #     seed=48,
+    #     block_size=block_size,
+    # ))
 
     print(f"\nCreated {len(scenarios)} test scenarios")
     return scenarios
@@ -330,7 +339,7 @@ def format_bytes(n_bytes: int) -> str:
 if __name__ == "__main__":
     # Example usage
     print("Creating scaling scenarios...")
-    scenarios = create_scaling_scenarios(base_dir="/tmp/benchmarks")
+    scenarios = create_scaling_scenarios(base_dir="./data/benchmarking")
 
     for scenario in scenarios:
         print(f"\n{scenario['name']}:")
