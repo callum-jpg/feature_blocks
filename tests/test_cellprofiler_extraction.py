@@ -118,7 +118,6 @@ class TestCellProfilerExtraction:
             'image_path': image_path,
             'segmentations': seg_path,
             'image_dimension_order': ['c', 'y', 'x'],
-            'image_downsample': 1,
             'block_size': 128,  # Large enough to capture each object
             'block_method': 'centroid',
             'feature_extraction_method': 'cellprofiler',
@@ -234,7 +233,6 @@ class TestCellProfilerExtraction:
             block_method=config['block_method'],
             segmentations=gpd.read_file(config['segmentations']),
             calculate_mask=config['calculate_mask'],
-            image_downsample=config['image_downsample']
         )
 
         # Verify output file was created
@@ -363,7 +361,6 @@ class TestCellProfilerExtraction:
             block_method=parsed_config['block_method'],
             segmentations=segmentations,
             calculate_mask=parsed_config['calculate_mask'],
-            image_downsample=parsed_config['image_downsample']
         )
 
         # Validate results
@@ -457,7 +454,6 @@ class TestCellProfilerExtraction:
             block_method='centroid',
             segmentations=gdf,
             calculate_mask=False,
-            image_downsample=1
         )
 
         # Verify output

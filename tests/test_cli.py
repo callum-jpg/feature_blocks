@@ -23,7 +23,6 @@ save_path = "/path/to/output.zarr"
 n_workers = 2
 memory = "4GB"
 calculate_mask = false
-image_downsample = 1
 """
         config_path.write_text(config_content)
 

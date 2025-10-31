@@ -15,9 +15,6 @@ segmentations = "/path/to/your/segmentations.geojson"
 # Provide information about dimension order
 image_dimension_order = ["c", "y", "x"]
 
-# Optional downsampling of the input image
-image_downsample = 1
-
 # Size of the window to extract around each segmentation centroid
 # Should be large enough to capture the entire object plus some context
 block_size = 128

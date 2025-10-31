@@ -86,14 +86,8 @@ def load_and_process_image(config: dict) -> Path:
         .data
     )
 
-    # Apply downsampling
-    downsample_factor = config.get("image_downsample", 1)
-    image = image[
-        :,
-        :,
-        ::downsample_factor,
-        ::downsample_factor,
-    ].rechunk((1, 1, config["block_size"], config["block_size"]))
+    # Rechunk
+    image = image.rechunk((1, 1, config["block_size"], config["block_size"]))
 
     log.info("Checking if image has already been saved to zarr...")
     if zarr_exists(zarr_path, image, full_input_validation=config.get("full_input_validation")):

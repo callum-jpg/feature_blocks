@@ -10,9 +10,6 @@ segmentations = "/path/to/segmentations.geojson"
 # Provide information about dimension order
 image_dimension_order = ["c", "y", "x"]
 
-# Optional downsampling of the input image
-image_downsample = 1
-
 # Size of the window to run inference on
 block_size = 112
 
