@@ -34,7 +34,7 @@ def extract(
     block_method: list["block", "centroid"] = "block",
     segmentations: typing.Optional["geopandas.GeoDataFrame"] = None,
     calculate_mask: bool = False,
-    image_downsample: int = 1,
+    mask_downsample: int = 1,
     masked_block_value=numpy.nan,
     masking_kwargs: typing.Dict[str, int] = None
 ):
@@ -222,7 +222,7 @@ def extract(
             masking_kwargs = {}
         
         mask = tissue_detection(
-            input_data[:, 0, ::image_downsample, ::image_downsample]
+            input_data[:, 0, ::mask_downsample, ::mask_downsample]
             .compute()
             .transpose(1, 2, 0),
             **masking_kwargs

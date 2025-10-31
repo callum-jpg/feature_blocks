@@ -42,7 +42,7 @@ def extract(config_file: str):
         python_path=config.get("python_path", "python"),
         memory=config.get("memory", "16GB"),
         calculate_mask=config.get("calculate_mask"),
-        image_downsample=config.get("image_downsample"),
+        mask_downsample=config.get("mask_downsample"),
         masking_kwargs=config.get("masking_kwargs"),
     )
 
@@ -96,7 +96,7 @@ def load_and_process_image(config: dict) -> Path:
     ].rechunk((1, 1, config["block_size"], config["block_size"]))
 
     log.info("Checking if image has already been saved to zarr...")
-    if zarr_exists(zarr_path, image):
+    if zarr_exists(zarr_path, image, full_input_validation=config.get("full_input_validation")):
         log.info(f"Saving image as chunked OME-Zarr to: {zarr_path}")
         # Save to OME-Zarr format
         from feature_blocks.io import create_ome_zarr_output
