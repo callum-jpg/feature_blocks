@@ -59,7 +59,7 @@ def standardise_image(image, dimension_order: tuple[str]):
     return image, dims
 
 
-def zarr_exists(zarr_path, new_array):
+def zarr_exists(zarr_path, new_array, full_input_validation: bool = True):
     """Check if OME-Zarr exists and has the same data as new_array."""
     if not os.path.exists(zarr_path):
         return True
@@ -79,9 +79,10 @@ def zarr_exists(zarr_path, new_array):
     if z.chunks != new_array.chunksize:
         return True
 
-    # Check the content - load from OME-Zarr "0" component
-    existing = dask.array.from_zarr(str(zarr_path), component="0")
-    if not dask.array.all(existing == new_array).compute():
-        return True
+    if full_input_validation:
+        # Check the content - load from OME-Zarr "0" component
+        existing = dask.array.from_zarr(str(zarr_path), component="0")
+        if not dask.array.all(existing == new_array).compute():
+            return True
 
     return False  # All checks passed, skip writing
