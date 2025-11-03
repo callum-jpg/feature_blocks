@@ -9,11 +9,13 @@ from .phikon import PhikonV2 as PhikonV2
 from .phikon_patch import PhikonV2Patch as PhikonV2Patch
 from .h_optimus_0 import H_optimus_0 as H_optimus_0
 from .uni import UNI as UNI
+from .tiny_vit import TinyViT
 
 __all__ = [
     "CellProfiler",
     "ConvFeatures",
     "DINOv2",
+    "TinyViT",
     "DummyModel",
     "PhikonV2",
     "PhikonV2Patch",
@@ -29,6 +31,7 @@ available_models = {
     "cellprofiler": CellProfiler,
     "conv": ConvFeatures,
     "dinov2": DINOv2,
+    "tiny_vit": TinyViT,
     "dummy": DummyModel,
     "phikon": PhikonV2,
     "phikon_patch": PhikonV2Patch,
