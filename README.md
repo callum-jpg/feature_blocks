@@ -130,7 +130,9 @@ See the `examples/` directory for complete workflows
 
 This project is licensed under the MIT License - see [LICENSE.txt](LICENSE.txt) for details.
 
-## Acknowledgments
+## Benchmarking
 
-- UNI model from [MahmoodLab](https://huggingface.co/MahmoodLab/UNI2-h)
-- Built with PyTorch, scikit-image, and SpatialData
+Run benchmarking with:
+```bash
+uv run --extra cu128 python benchmarks/cpu_vs_gpu_benchmark.py
+```
