@@ -157,11 +157,8 @@ def run_scaling_benchmark(
     """
     suite = BenchmarkSuite(name="zarr_dask_scaling")
 
-    if output_dir is None:
-        output_dir = Path(tempfile.mkdtemp(prefix="benchmark_output_"))
-    else:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(output_dir) / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*60}")
     print(f"Running Zarr+Dask Scaling Benchmark")
@@ -347,8 +344,9 @@ if __name__ == "__main__":
         scenarios=scenarios,
         model_name="dummy",
         block_size=BLOCK_SIZE,
-        worker_counts=[8]
+        worker_counts=[32],
+        output_dir = "data/benchmarking"
     )
 
     # Save results
-    suite.save("image_size_scaling_benchmark.json")
+    suite.save("data/benchmarking/image_size_scaling_benchmark_v2.json")
