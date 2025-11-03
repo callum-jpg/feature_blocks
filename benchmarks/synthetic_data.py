@@ -4,15 +4,13 @@ Generate synthetic data for benchmarking feature_blocks.
 Creates zarr arrays and segmentations of various sizes for controlled testing.
 """
 
-import numpy as np
-import zarr
-import geopandas as gpd
-from shapely.geometry import Polygon
 from pathlib import Path
-import tempfile
-from typing import Tuple, Optional, List
-import shutil
+from typing import List, Optional, Tuple, Union
+
 import dask.array
+import geopandas as gpd
+import numpy as np
+from shapely.geometry import Polygon
 
 from feature_blocks.io import create_ome_zarr_output
 
@@ -23,7 +21,7 @@ def create_synthetic_image_zarr(
     chunk_size: Optional[Tuple[int, int, int, int]] = None,
     dtype: str = "uint8",
     pattern: str = "random",
-    seed: int = 42
+    seed: int = 42,
 ) -> str:
     """
     Create a synthetic image zarr array.
@@ -118,7 +116,7 @@ def create_synthetic_segmentations(
     n_regions: int,
     region_size_range: Tuple[int, int] = (50, 200),
     output_path: Optional[str] = None,
-    seed: int = 42
+    seed: int = 42,
 ) -> gpd.GeoDataFrame:
     """
     Create synthetic segmentations (polygons) for centroid-based processing.
@@ -151,20 +149,19 @@ def create_synthetic_segmentations(
         half_size = size // 2
 
         # Create square polygon
-        polygon = Polygon([
-            (cx - half_size, cy - half_size),
-            (cx + half_size, cy - half_size),
-            (cx + half_size, cy + half_size),
-            (cx - half_size, cy + half_size),
-        ])
+        polygon = Polygon(
+            [
+                (cx - half_size, cy - half_size),
+                (cx + half_size, cy - half_size),
+                (cx + half_size, cy + half_size),
+                (cx - half_size, cy + half_size),
+            ]
+        )
 
         polygons.append(polygon)
         ids.append(i)
 
-    gdf = gpd.GeoDataFrame({
-        "id": ids,
-        "geometry": polygons
-    }, crs="EPSG:4326")
+    gdf = gpd.GeoDataFrame({"id": ids, "geometry": polygons}, crs="EPSG:4326")
 
     if output_path:
         gdf.to_file(output_path, driver="GeoJSON")
@@ -179,7 +176,7 @@ def create_test_scenario(
     block_size: int,
     n_regions: Optional[int] = None,
     base_dir: Optional[str] = None,
-    seed: int = 42
+    seed: int = 42,
 ) -> dict:
     """
     Create a complete test scenario with image and segmentations.
@@ -211,7 +208,7 @@ def create_test_scenario(
         image_size=image_size,
         pattern="random",
         chunk_size=(image_size[0], image_size[1], block_size, block_size),
-        seed=seed
+        seed=seed,
     )
 
     # Create segmentations if requested
@@ -222,7 +219,7 @@ def create_test_scenario(
             image_size=(H, W),
             n_regions=n_regions,
             output_path=str(segmentations_path),
-            seed=seed
+            seed=seed,
         )
 
     scenario = {
@@ -231,13 +228,19 @@ def create_test_scenario(
         "segmentations_path": str(segmentations_path) if segmentations_path else None,
         "image_size": image_size,
         "n_regions": n_regions,
-        "base_dir": str(base_dir)
+        "block_size": block_size,
+        "base_dir": str(base_dir),
     }
 
     return scenario
 
 
-def create_scaling_scenarios(block_size: int, base_dir: Optional[str] = None) -> List[dict]:
+def create_scenarios(
+    block_size: Union[Tuple[int], int],
+    image_size: Union[Tuple[int], Tuple[Tuple[int]]],
+    base_dir: str,
+    n_regions: Union[Tuple[int], int] = None,
+) -> List[dict]:
     """
     Create a suite of test scenarios for scaling benchmarks.
 
@@ -248,83 +251,30 @@ def create_scaling_scenarios(block_size: int, base_dir: Optional[str] = None) ->
     """
     scenarios = []
 
-    # Small images (should fit in memory, dask overhead may dominate)
-    scenarios.append(create_test_scenario(
-        name="small_512",
-        image_size=(3, 1, 512, 512),
-        n_regions=10,
-        base_dir=base_dir,
-        seed=42,
-        block_size=block_size,
-    ))
+    if isinstance(block_size, int):
+        block_size = [block_size]
 
-    scenarios.append(create_test_scenario(
-        name="small_1024",
-        image_size=(3, 1, 1024, 1024),
-        n_regions=25,
-        base_dir=base_dir,
-        seed=43,
-        block_size=block_size,
-    ))
+    if not all(isinstance(i_s, tuple) for i_s in image_size):
+        image_size = image_size
 
-    # Medium images (starting to benefit from chunking)
-    scenarios.append(create_test_scenario(
-        name="medium_2048",
-        image_size=(3, 1, 2048, 2048),
-        n_regions=100,
-        base_dir=base_dir,
-        seed=44,
-        block_size=block_size,
-    ))
+    if isinstance(n_regions, int) or n_regions is None:
+        n_regions = [n_regions]
 
-    # scenarios.append(create_test_scenario(
-    #     name="medium_4096",
-    #     image_size=(3, 1, 4096, 4096),
-    #     n_regions=256,
-    #     base_dir=base_dir,
-    #     seed=45,
-    #     block_size=block_size,
-    # ))
-
-    # # Large images (zarr+dask should excel here)
-    # scenarios.append(create_test_scenario(
-    #     name="large_8192",
-    #     image_size=(3, 1, 8192, 8192),
-    #     n_regions=500,
-    #     base_dir=base_dir,
-    #     seed=46,
-    #     block_size=block_size,
-    # ))
-
-    # scenarios.append(create_test_scenario(
-    #     name="large_16384",
-    #     image_size=(3, 1, 16384, 16384),
-    #     n_regions=1000,
-    #     base_dir=base_dir,
-    #     seed=47,
-    #     block_size=block_size,
-    # ))
-
-    # # Very large (extreme case)
-    # scenarios.append(create_test_scenario(
-    #     name="xlarge_32768",
-    #     image_size=(3, 1, 32768, 32768),
-    #     n_regions=2000,
-    #     base_dir=base_dir,
-    #     seed=48,
-    #     block_size=block_size,
-    # ))
+    for blk_sz in block_size:
+        for img_sz in image_size:
+            for n_reg in n_regions:
+                scenarios.append(
+                    create_test_scenario(
+                        name=f"image_size_{img_sz}_block_size_{blk_sz}",
+                        base_dir=base_dir,
+                        image_size=img_sz,
+                        block_size=blk_sz,
+                        n_regions=n_reg,
+                    )
+                )
 
     print(f"\nCreated {len(scenarios)} test scenarios")
     return scenarios
-
-
-def cleanup_scenario(scenario: dict):
-    """Remove files created for a scenario."""
-    base_dir = Path(scenario["base_dir"])
-    if base_dir.exists():
-        shutil.rmtree(base_dir)
-        print(f"Cleaned up {base_dir}")
 
 
 def format_bytes(n_bytes: int) -> str:
@@ -334,16 +284,3 @@ def format_bytes(n_bytes: int) -> str:
             return f"{n_bytes:.1f}{unit}"
         n_bytes /= 1024
     return f"{n_bytes:.1f}PB"
-
-
-if __name__ == "__main__":
-    # Example usage
-    print("Creating scaling scenarios...")
-    scenarios = create_scaling_scenarios(base_dir="./data/benchmarking")
-
-    for scenario in scenarios:
-        print(f"\n{scenario['name']}:")
-        print(f"  Image: {scenario['image_path']}")
-        print(f"  Size: {scenario['image_size']}")
-        if scenario['segmentations_path']:
-            print(f"  Regions: {scenario['n_regions']}")

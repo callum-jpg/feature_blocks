@@ -8,6 +8,7 @@ Provides tools for:
 - Results storage and export
 """
 
+from __future__ import annotations
 import time
 import psutil
 import os
@@ -18,21 +19,32 @@ from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Callable
 from pathlib import Path
 
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
+from typing import List, Optional, Tuple, Any
+import json
+import numpy as np
 
 @dataclass
-class BenchmarkResult:
-    """Container for benchmark results."""
-    name: str
-    image_size: tuple
-    n_chunks: int
-    block_size: int
-    n_workers: int
-    model_name: str
-    method: str  # "zarr_dask", "gpu_batch", "in_memory"
+class BenchmarkResults:
+    """Unified benchmark result + suite container."""
+
+    # Suite metadata
+    suite_name: str = "feature_blocks_benchmarks"
+    results: List[BenchmarkResults] = field(default_factory=list, repr=False)
+
+    # Individual benchmark fields
+    name: Optional[str] = None
+    image_size: Optional[Tuple[int, int]] = None
+    n_chunks: Optional[int] = None
+    block_size: Optional[int] = None
+    n_workers: Optional[int] = None
+    model_name: Optional[str] = None
+    method: Optional[str] = None  # e.g. "zarr_dask", "gpu_batch", "in_memory"
 
     # Performance metrics
-    total_time: float
-    inference_time: float
+    total_time: Optional[float] = None
+    inference_time: Optional[float] = None
     io_time: Optional[float] = None
     setup_time: Optional[float] = None
 
@@ -44,24 +56,46 @@ class BenchmarkResult:
     regions_per_second: float = 0.0
     pixels_per_second: float = 0.0
 
-    # Additional metadata
+    # Metadata
     n_features: int = 0
     gpu_available: bool = False
     device: str = "cpu"
 
-    def to_dict(self):
-        """Convert to dictionary."""
-        return asdict(self)
+    def add_result(self, result: BenchmarkResults):
+        """Add another BenchmarkResults (as a result) to this suite."""
+        if not isinstance(result, BenchmarkResults):
+            raise TypeError("Expected a BenchmarkResults instance.")
+        self.results.append(result)
 
-    def __str__(self):
-        return (
-            f"{self.name}: {self.method} | "
-            f"Size: {self.image_size} | "
-            f"Chunks: {self.n_chunks} | "
-            f"Time: {self.total_time:.2f}s | "
-            f"Memory: {self.peak_memory_mb:.1f}MB | "
-            f"Throughput: {self.regions_per_second:.1f} regions/s"
-        )
+    def to_dict(self):
+        """Convert to dict recursively."""
+        d = asdict(self)
+        d["results"] = [r.to_dict() for r in self.results]
+        return d
+
+    def save(self, path: str):
+        """Save suite or single result to JSON."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        print(f"Saved to {path}")
+
+    @classmethod
+    def load(cls, path: str) -> BenchmarkResults:
+        """Load suite or result from JSON."""
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        def from_dict(d: dict) -> BenchmarkResults:
+            results = [from_dict(r) for r in d.pop("results", [])]
+            obj = cls(**d)
+            obj.results = results
+            if obj.image_size and isinstance(obj.image_size, list):
+                obj.image_size = tuple(obj.image_size)
+            return obj
+
+        return from_dict(data)
 
 
 class MemoryTracker:
@@ -95,139 +129,6 @@ class MemoryTracker:
             "delta_peak_mb": self.peak_mb - self.baseline_mb,
             "delta_avg_mb": np.mean(self.samples) - self.baseline_mb
         }
-
-
-@contextmanager
-def benchmark_context(name: str = "benchmark"):
-    """
-    Context manager for benchmarking code execution.
-
-    Usage:
-        with benchmark_context("my_test") as tracker:
-            # code to benchmark
-            pass
-
-        stats = tracker.get_stats()
-        print(f"Time: {stats['elapsed']:.2f}s")
-        print(f"Peak memory: {stats['memory']['peak_mb']:.1f}MB")
-    """
-    tracker = {
-        "name": name,
-        "start_time": time.time(),
-        "memory": MemoryTracker()
-    }
-
-    def get_stats():
-        elapsed = time.time() - tracker["start_time"]
-        mem_stats = tracker["memory"].get_stats()
-        return {
-            "name": name,
-            "elapsed": elapsed,
-            "memory": mem_stats
-        }
-
-    tracker["get_stats"] = get_stats
-
-    try:
-        yield tracker
-    finally:
-        tracker["memory"].sample()
-
-
-class BenchmarkSuite:
-    """Manage a collection of benchmark results."""
-
-    def __init__(self, name: str = "feature_blocks_benchmarks"):
-        self.name = name
-        self.results: List[BenchmarkResult] = []
-
-    def add_result(self, result: BenchmarkResult):
-        """Add a benchmark result."""
-        self.results.append(result)
-
-    def save(self, path: str):
-        """Save results to JSON file."""
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        data = {
-            "name": self.name,
-            "n_results": len(self.results),
-            "results": [r.to_dict() for r in self.results]
-        }
-
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-
-        print(f"Saved {len(self.results)} results to {path}")
-
-    @classmethod
-    def load(cls, path: str):
-        """Load results from JSON file."""
-        with open(path, "r") as f:
-            data = json.load(f)
-
-        suite = cls(name=data["name"])
-        for r_dict in data["results"]:
-            # Convert tuple strings back to tuples
-            if isinstance(r_dict["image_size"], list):
-                r_dict["image_size"] = tuple(r_dict["image_size"])
-            suite.results.append(BenchmarkResult(**r_dict))
-
-        return suite
-
-    def filter(self, **kwargs) -> List[BenchmarkResult]:
-        """Filter results by attributes."""
-        filtered = self.results
-        for key, value in kwargs.items():
-            filtered = [r for r in filtered if getattr(r, key) == value]
-        return filtered
-
-    def summary(self) -> str:
-        """Generate summary statistics."""
-        if not self.results:
-            return "No results"
-
-        lines = [f"Benchmark Suite: {self.name}", f"Total runs: {len(self.results)}", ""]
-
-        # Group by method
-        methods = set(r.method for r in self.results)
-        for method in sorted(methods):
-            method_results = self.filter(method=method)
-            avg_time = np.mean([r.total_time for r in method_results])
-            avg_mem = np.mean([r.peak_memory_mb for r in method_results])
-            lines.append(f"{method}:")
-            lines.append(f"  Runs: {len(method_results)}")
-            lines.append(f"  Avg time: {avg_time:.2f}s")
-            lines.append(f"  Avg peak memory: {avg_mem:.1f}MB")
-            lines.append("")
-
-        return "\n".join(lines)
-
-
-def measure_function(func: Callable, *args, track_memory: bool = True, **kwargs):
-    """
-    Measure execution time and memory usage of a function.
-
-    Args:
-        func: Function to measure
-        *args: Function arguments
-        track_memory: Whether to track memory usage
-        **kwargs: Function keyword arguments
-
-    Returns:
-        Tuple of (result, elapsed_time, memory_stats)
-    """
-    if track_memory:
-        memory_tracker = MemoryTracker()
-
-    start_time = time.time()
-    result = func(*args, **kwargs)
-    elapsed = time.time() - start_time
-
-    memory_stats = memory_tracker.get_stats() if track_memory else None
-
-    return result, elapsed, memory_stats
 
 
 def estimate_n_chunks(image_size: tuple, block_size: int, block_method: str = "block") -> int:
