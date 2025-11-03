@@ -1,5 +1,6 @@
 import zarr
 from ome_zarr.io import parse_url
+import gc
 
 
 def write(zarr_path, data, region):
@@ -15,3 +16,7 @@ def write(zarr_path, data, region):
     else:  # len(region) == 2
         # ROI features (2D data)
         z[tuple(region)] = data.squeeze()
+
+    del data
+
+    gc.collect()
