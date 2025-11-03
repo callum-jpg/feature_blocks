@@ -1,19 +1,19 @@
 import timm
 import torch
 from torch import nn
+from torchvision import transforms
 
 
 class DINOv2(nn.Module):
     def __init__(self):
         super().__init__()
+        self.model = timm.create_model("vit_large_patch14_dinov2", pretrained=True)
         self.n_features = self.model.num_features
         self.output_shape = (self.n_features, 1, 1, 1)  # (C, Z, H, W)
 
     def forward(self, x):
-        from torchvision import transforms
-
-        model = timm.create_model("vit_large_patch14_dinov2", pretrained=True)
-        model.eval()
+        
+        self.model.eval()
 
         transform = transforms.Compose(
             [
@@ -26,7 +26,7 @@ class DINOv2(nn.Module):
         x = x.unsqueeze(0).to(torch.float)
 
         with torch.no_grad():
-            features = model(transform(x))
+            features = self.model(transform(x))
 
         features = features.reshape(self.output_shape)
 
