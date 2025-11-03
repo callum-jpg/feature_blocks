@@ -24,12 +24,8 @@ class DummyModel(nn.Module):
     """
     An example feature extraction class
     """
-
     def __init__(self):
         super().__init__()
-
-        # self.model = AutoModel.from_pretrained('facebook/dinov2-base')
-        # self.n_features = model.config.hidden_size
 
         # Define the model
         self.model = nn.Identity()
@@ -40,6 +36,9 @@ class DummyModel(nn.Module):
         self.output_shape = (self.n_features, 1, 1, 1)  # (C, Z, H, W)
 
     def forward(self, x):
+        """
+        We don't actually compute from x
+        """
         features = random_torch_tensor(self.output_shape)
 
         return features.cpu().numpy()
