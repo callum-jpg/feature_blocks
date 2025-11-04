@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import zarr
 import time
+import shutil
 from typing import List, Tuple, Optional, Callable
 from pathlib import Path
 import geopandas as gpd
@@ -60,6 +61,7 @@ class GPUBatchInference:
         self,
         zarr_path: str,
         block_size: int,
+        output_zarr_path: Optional[str] = None,
         track_memory: bool = True
     ) -> Tuple[np.ndarray, dict]:
         """
@@ -68,6 +70,7 @@ class GPUBatchInference:
         Args:
             zarr_path: Path to input zarr array
             block_size: Size of blocks to extract
+            output_zarr_path: Optional path to write output zarr
             track_memory: Whether to track memory usage
 
         Returns:
@@ -96,6 +99,7 @@ class GPUBatchInference:
         timing = {
             "io_time": 0.0,
             "inference_time": 0.0,
+            "write_time": 0.0,
             "total_time": 0.0
         }
 
@@ -173,11 +177,39 @@ class GPUBatchInference:
 
             timing["inference_time"] += time.time() - inf_start
 
+        # Write to zarr if output path is specified
+        if output_zarr_path:
+            write_start = time.time()
+            print(f"Writing features to {output_zarr_path}...")
+
+            # Remove existing output if it exists
+            if Path(output_zarr_path).exists():
+                shutil.rmtree(output_zarr_path)
+
+            # Create zarr store with compression (matching dask method)
+            compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+
+            # Create zarr array and write features
+            z_out = zarr.open(
+                output_zarr_path,
+                mode="w",
+                shape=features.shape,
+                chunks=features.shape,  # Single chunk write
+                dtype=np.float32,
+                compressor=compressor,
+            )
+            z_out[:] = features
+
+            timing["write_time"] = time.time() - write_start
+            print(f"  Write: {timing['write_time']:.2f}s")
+
         timing["total_time"] = time.time() - total_start
 
         print(f"Completed in {timing['total_time']:.2f}s")
         print(f"  I/O: {timing['io_time']:.2f}s")
         print(f"  Inference: {timing['inference_time']:.2f}s")
+        if output_zarr_path:
+            print(f"  Write: {timing['write_time']:.2f}s")
 
         stats = {
             "timing": timing,
@@ -194,6 +226,7 @@ class GPUBatchInference:
         zarr_path: str,
         block_size: int,
         image_size: Tuple[int, int, int, int],
+        output_zarr_path: Optional[str] = None,
         method: str = "block"
     ) -> BenchmarkResults:
         """
@@ -203,18 +236,19 @@ class GPUBatchInference:
             zarr_path: Path to input zarr
             block_size: Block size
             image_size: Image dimensions
+            output_zarr_path: Optional path to write output zarr
             method: "block" or "centroid"
 
         Returns:
             BenchmarkResults object
         """
-        
+
 
         n_chunks = estimate_n_chunks(image_size, block_size, method)
 
         if method == "block":
             features, stats = self.extract_from_zarr_blocks(
-                zarr_path, block_size, track_memory=True
+                zarr_path, block_size, output_zarr_path=output_zarr_path, track_memory=True
             )
         else:
             raise NotImplementedError(f"Method {method} not yet implemented")
@@ -254,6 +288,7 @@ def benchmark_gpu_inference(
     model_name: str,
     block_size: int,
     image_size: Tuple[int, int, int, int],
+    output_zarr_path: Optional[str] = None,
     batch_size: int = 32,
     device: str = "cuda"
 ) -> BenchmarkResults:
@@ -265,6 +300,7 @@ def benchmark_gpu_inference(
         model_name: Name of model
         block_size: Block size
         image_size: Image dimensions
+        output_zarr_path: Optional path to write output zarr
         batch_size: Batch size for GPU
         device: "cuda" or "cpu"
 
@@ -277,4 +313,4 @@ def benchmark_gpu_inference(
         device=device
     )
 
-    return inference.benchmark(zarr_path, block_size, image_size)
+    return inference.benchmark(zarr_path, block_size, image_size, output_zarr_path=output_zarr_path)

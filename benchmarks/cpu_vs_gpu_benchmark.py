@@ -74,6 +74,7 @@ def compare_cpu_gpu_single_scenario(
             model_name=model_name,
             block_size=block_size,
             image_size=image_size,
+            output_zarr_path=str(output_zarr_gpu),
             batch_size=gpu_batch_size,
             device=device
         )
