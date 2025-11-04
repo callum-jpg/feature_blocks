@@ -18,7 +18,7 @@ from feature_blocks.slice import (filter_slices_by_mask,
                                   generate_centroid_slices_with_single_masks,
                                   generate_nd_slices, normalize_slices)
 from feature_blocks.io import create_ome_zarr_output
-from feature_blocks.task import infer, read, read_with_mask, write
+from feature_blocks.task import process_region
 
 log = logging.getLogger(__name__)
 
@@ -241,9 +241,8 @@ def extract(
             len(regions) > 0
         ), "No foreground regions found after masking. Adjust or disable masking."
 
-    # Create tasks. This is a list of delayed jobs to be run on the dask
-    # backend
-    log.info(f"Creating delayed functions for {len(regions)} regions...")
+    # Prepare task parameters
+    log.info(f"Preparing to process {len(regions)} regions using client.map()...")
 
     # Determine model identifier to pass (string if possible for efficiency)
     if isinstance(feature_extraction_method, str):
@@ -252,28 +251,17 @@ def extract(
         # If a callable was passed directly, use it (less efficient but supported)
         model_identifier = feature_extract_fn
 
-    # Create delayed tasks
-    tasks = []
-    for reg in tqdm(regions, total=len(regions), desc="Creating Dask tasks..."):
-        task = process_region(
-            reg,
-            input_zarr_path,
-            model_identifier,
-            feature_extract_fn.n_features,
-            output_zarr_path,
-            block_size,
-            output_chunks,
-            mask_store_path,
-        )
-        tasks.append(task)
-
-    start_time = time.time()
-
     # Only pass model_identifier for warmup if it's a string (serializable)
     warmup_model = model_identifier if isinstance(model_identifier, str) else None
 
+    start_time = time.time()
+
+    # Use client.map() for efficient task distribution
+    # This avoids creating 3N delayed objects (read, infer, write per region)
+    # Instead, we create N futures with a single function per region
     run_dask_backend(
-        tasks,
+        process_region,
+        regions,
         n_workers=n_workers,
         python_path=python_path,
         memory=memory,
@@ -281,6 +269,15 @@ def extract(
         input_zarr_path=input_zarr_path,
         output_zarr_path=output_zarr_path,
         mask_store_path=mask_store_path,
+        function_kwargs={
+            "input_zarr_path": input_zarr_path,
+            "model_identifier": model_identifier,
+            "n_features": feature_extract_fn.n_features,
+            "output_zarr_path": output_zarr_path,
+            "block_size": block_size,
+            "output_chunks": output_chunks,
+            "mask_store_path": mask_store_path,
+        },
     )
     elapsed = time.time() - start_time
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
@@ -295,90 +292,3 @@ def get_model(model: typing.Callable | str) -> "torch.nn.Module":
         return available_models[model]()
 
     return model
-
-
-def process_region(
-    reg,
-    input_zarr_path,
-    model_identifier,
-    n_features,
-    output_zarr_path,
-    block_size,
-    output_chunks,
-    mask_store_path=None,
-):
-    """Process a single region
-
-    Args:
-        reg: Region tuple (slices or with chunk_id/mask_index)
-        input_zarr_path: Path to input zarr
-        model_identifier: String model name (serialization-friendly) or callable
-        n_features: Number of features the model produces
-        output_zarr_path: Path to output zarr
-        block_size: Size of blocks
-        output_chunks: Output chunk shape
-        mask_store_path: Path to zarr store containing mask data (for CellProfiler)
-    """
-
-    # Block method is being used
-    if len(reg) == 4:
-        delayed_chunk = dask.delayed(read)(input_zarr_path, reg)
-        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, model_identifier)
-        # Build where the new region will be in the output zarr
-        # (n_features, 1, H, W)
-        new_region = [
-            slice(0, n_features, None),
-            slice(0, 1, None),
-        ]
-        # feature_blocks only supports square blocks, so we can infer that
-        # H == W, hence why we only select output_chunks[2]
-        chunk_size = block_size // output_chunks[2]
-        new_region.extend(normalize_slices(reg[-2:], chunk_size))
-
-        delayed_write = dask.delayed(write, pure=False)(
-            output_zarr_path, delayed_result, new_region
-        )
-    # ROI method is being used (standard centroid)
-    elif len(reg) == 2:
-        chunk_id, chunk_slices = reg[0], reg[1:][0]
-
-        delayed_chunk = dask.delayed(read)(input_zarr_path, chunk_slices)
-
-        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, model_identifier)
-
-        new_region = [
-            chunk_id,
-            slice(0, n_features),
-        ]
-
-        delayed_write = dask.delayed(write, pure=False)(
-            output_zarr_path, delayed_result, new_region
-        )
-
-    # CellProfiler method with mask index (centroid + mask)
-    elif len(reg) == 3:
-        chunk_id, chunk_slices, mask_index = reg
-
-        # Load mask from zarr store instead of embedding in graph
-        # This is much more efficient for large numbers of segmentations
-        delayed_chunk = dask.delayed(read_with_mask)(
-            input_zarr_path, (chunk_id, chunk_slices, mask_index), mask_store_path
-        )
-
-        delayed_result = dask.delayed(infer, pure=True)(delayed_chunk, model_identifier)
-
-        new_region = [
-            chunk_id,
-            slice(0, n_features),
-        ]
-
-        delayed_write = dask.delayed(write, pure=False)(
-            output_zarr_path, delayed_result, new_region
-        )
-
-    else:
-        raise ValueError(
-            f"Region is of length {len(reg)} rather than the expected 2, 3, or 4. Region: {reg}"
-        )
-
-    return delayed_write

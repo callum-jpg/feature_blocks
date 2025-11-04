@@ -2,10 +2,8 @@ import zarr
 from ome_zarr.io import parse_url
 import gc
 
-
 def write(zarr_path, data, region):
-    # Open OME-Zarr store and write only to the required region
-    # All zarr stores are OME-Zarr format with data at path "0"
+    """Write data to zarr store."""
     store = parse_url(zarr_path, mode="r+").store
     root = zarr.open_group(store=store, mode="r+")
     z = root["0"]
@@ -18,5 +16,4 @@ def write(zarr_path, data, region):
         z[tuple(region)] = data.squeeze()
 
     del data
-
     gc.collect()

@@ -3,16 +3,7 @@ _model_cache = {}
 
 
 def infer(chunk, model_identifier):
-    """
-    Infer features from a chunk using the specified model.
-
-    Args:
-        chunk: Input data chunk
-        model_identifier: Either a string (model name) or a callable (model instance)
-
-    Returns:
-        Extracted features
-    """
+    """Infer features from a chunk using the specified model."""
     # Check if it's already a callable (for backwards compatibility)
     if callable(model_identifier):
         return model_identifier(chunk)

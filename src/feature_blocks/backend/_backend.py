@@ -34,7 +34,8 @@ def get_n_workers():
 
 
 def run_dask_backend(
-    functions: list[Callable],
+    function: Callable,
+    regions: list,
     visualise_graph: bool = False,
     n_workers: int | None = None,
     python_path: str = "python",
@@ -43,6 +44,7 @@ def run_dask_backend(
     input_zarr_path: str | None = None,
     output_zarr_path: str | None = None,
     mask_store_path: str | None = None,
+    function_kwargs: dict | None = None,
 ):
     if in_slurm():
         from dask_jobqueue import SLURMCluster
@@ -93,70 +95,72 @@ def run_dask_backend(
             )
             log.info("Using CPU cluster")
 
-            if len(functions) < n_workers:
-                n_workers = len(functions)
+            if len(regions) < n_workers:
+                n_workers = len(regions)
 
             log.info(f"Using {n_workers} n_workers with {memory} memory per worker")
 
+    # Note: visualise_graph is not applicable with client.map()
+    # The task graph is much simpler now (N independent tasks instead of 3N chained tasks)
     if visualise_graph:
-        dask.visualize(
-            *functions,
-            filename="dask-task-graph",
-            format="svg",
-            optimize_graph=True,
-            color="order",
-        )
+        log.warning("visualise_graph is not supported with client.map() workflow")
 
     client = Client(cluster, asynchronous=False)
 
     # Pre-load model on all workers to avoid redundant loading
-    if model_identifier is not None:
-        log.info(f"Pre-loading model '{model_identifier}' on all workers...")
+    # if model_identifier is not None:
+    #     log.info(f"Pre-loading model '{model_identifier}' on all workers...")
 
-        def warmup_model(model_name):
-            """Load model into worker's local cache."""
-            # This will initialize the model in the worker's _model_cache
-            # We use a dummy input just to trigger model loading
-            import numpy
+    #     def warmup_model(model_name):
+    #         """Load model into worker's local cache."""
+    #         # This will initialize the model in the worker's _model_cache
+    #         # We use a dummy input just to trigger model loading
+    #         import numpy
 
-            from feature_blocks.task import infer
+    #         from feature_blocks.task import infer
 
-            dummy_input = numpy.zeros((1, 1, 1, 1), dtype=numpy.float32)
-            try:
-                infer(dummy_input, model_name)
-            except Exception:
-                # Some models may fail with dummy input, but the model
-                # will still be loaded into the cache
-                pass
-            return f"Model {model_name} loaded"
+    #         dummy_input = numpy.zeros((1, 1, 1, 1), dtype=numpy.float32)
+    #         try:
+    #             infer(dummy_input, model_name)
+    #         except Exception:
+    #             # Some models may fail with dummy input, but the model
+    #             # will still be loaded into the cache
+    #             pass
+    #         return f"Model {model_name} loaded"
 
-        # Run warmup on all workers (use actual worker count from cluster)
-        actual_workers = len(client.scheduler_info()["workers"])
-        warmup_futures = client.map(warmup_model, [model_identifier] * actual_workers)
-        client.gather(warmup_futures)
-        log.info("Model pre-loading complete")
+    #     # Run warmup on all workers (use actual worker count from cluster)
+    #     actual_workers = len(client.scheduler_info()["workers"])
+    #     warmup_futures = client.map(warmup_model, [model_identifier] * actual_workers)
+    #     client.gather(warmup_futures)
+    #     log.info("Model pre-loading complete")
+
+    if function_kwargs is None:
+        function_kwargs = {}
+
+    log.info(f"Mapping {function.__name__} over {len(regions)} regions...")
 
     with performance_report(filename="performance_report.html"):
-        futures = client.compute(functions)
+        futures = client.map(function, regions, pure=True, **function_kwargs)
         progress(futures, notebook=False)
 
     # Process results with timeout
     completed_count = 0
     failed_indices = []
 
-    for i, future in enumerate(as_completed(futures, timeout=600 * len(functions))):
+    for i, future in enumerate(as_completed(futures, timeout=600 * len(regions))):
         try:
             # Get result with individual timeout
             result = future.result(timeout=600)
 
             completed_count += 1
-            if completed_count % 1000 == 0:  # Progress update every 100 functions
-                print(f"Completed {completed_count}/{len(functions)} tasks")
+            if completed_count % 1000 == 0:  # Progress update every 1000 tasks
+                print(f"Completed {completed_count}/{len(regions)} tasks")
 
         except Exception as e:
             tb = traceback.extract_tb(e.__traceback__)
             func_name = tb[-1].name  # the last function in the traceback (where it failed)
             print(f"Task {i} failed in function '{func_name}': {e}.")
+            failed_indices.append(i)
 
     print(f"Completed: {completed_count}, Failed: {len(failed_indices)}")
 

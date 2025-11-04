@@ -76,8 +76,7 @@ def test_zarr_configuration():
 
 def test_model_caching():
     """Test that model caching works correctly."""
-    from feature_blocks.task import infer
-    from feature_blocks.task._infer import _model_cache
+    from feature_blocks.task._infer import infer, _model_cache
 
     # Clear cache first
     _model_cache.clear()
