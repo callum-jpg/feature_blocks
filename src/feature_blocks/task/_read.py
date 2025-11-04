@@ -4,25 +4,63 @@ from ome_zarr.io import parse_url
 
 
 def read(input_zarr_path, region):
-    """Read data from zarr store."""
+    """Read data from zarr store.
+
+    If a ZarrHandlePlugin is registered on the worker, uses the cached
+    zarr handle. Otherwise, opens the store directly (backward compatible).
+    """
+    try:
+        # Try to use cached handle from worker plugin
+        from distributed import get_worker
+        worker = get_worker()
+        if 'zarr_input' in worker.data:
+            z = worker.data['zarr_input']
+            return z[region]
+    except (ValueError, ImportError):
+        # Not in a Dask worker context or distributed not available
+        pass
+
+    # Fallback to opening store directly (backward compatible)
     store = parse_url(input_zarr_path, mode="r").store
     root = zarr.open_group(store=store, mode="r")
     z = root["0"]
-    
+
     return z[region]
 
 
 def read_with_mask(input_zarr_path, region_with_mask, mask_store_path):
-    """Read image data and combine with mask data from mask store."""
+    """Read image data and combine with mask data from mask store.
+
+    If a ZarrHandlePlugin is registered on the worker, uses the cached
+    zarr handles. Otherwise, opens the stores directly (backward compatible).
+    """
     centroid_id, slice_obj, mask_index = region_with_mask
 
-    # Open OME-Zarr store and read only the required chunk
-    store = parse_url(input_zarr_path, mode="r").store
-    root = zarr.open_group(store=store, mode="r")
-    z = root["0"]
+    # Try to use cached handles from worker plugin
+    z = None
+    mask_store = None
 
-    # Open mask store and read only the required mask
-    mask_store = zarr.open(mask_store_path, mode="r")
+    try:
+        from distributed import get_worker
+        worker = get_worker()
+
+        if 'zarr_input' in worker.data:
+            z = worker.data['zarr_input']
+
+        if 'zarr_mask' in worker.data:
+            mask_store = worker.data['zarr_mask']
+    except (ValueError, ImportError):
+        # Not in a Dask worker context or distributed not available
+        pass
+
+    # Fallback to opening stores directly if not cached
+    if z is None:
+        store = parse_url(input_zarr_path, mode="r").store
+        root = zarr.open_group(store=store, mode="r")
+        z = root["0"]
+
+    if mask_store is None:
+        mask_store = zarr.open(mask_store_path, mode="r")
 
     # Read image data
     image_data = z[slice_obj]  # Shape: (C, Z, H, W)

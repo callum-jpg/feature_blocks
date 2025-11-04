@@ -7,6 +7,7 @@ import dask
 from dask.distributed import (Client, LocalCluster, as_completed,
                               performance_report, progress)
 from distributed.utils import silence_logging_cmgr
+from ._zarr_plugin import ZarrHandlePlugin
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +107,18 @@ def run_dask_backend(
         log.warning("visualise_graph is not supported with client.map() workflow")
 
     client = Client(cluster, asynchronous=False)
+
+    # Register ZarrHandlePlugin to keep zarr stores open for worker lifetime
+    # This eliminates the overhead of opening/closing stores on every task
+    if input_zarr_path or output_zarr_path or mask_store_path:
+        log.info("Registering ZarrHandlePlugin for persistent zarr handles...")
+        plugin = ZarrHandlePlugin(
+            input_path=input_zarr_path,
+            output_path=output_zarr_path,
+            mask_store_path=mask_store_path
+        )
+        client.register_plugin(plugin, name='zarr-handle-plugin')
+        log.info("ZarrHandlePlugin registered successfully")
 
     # Pre-load model on all workers to avoid redundant loading
     # if model_identifier is not None:
