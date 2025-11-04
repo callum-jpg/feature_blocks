@@ -3,8 +3,6 @@ from typing import List, Optional, Tuple
 
 import numpy
 
-from ..utility._rasterize import rasterize_single_polygon
-
 
 def generate_nd_slices(
     shape: Tuple[int, int, int, int], size: int, slice_axes: Optional[List[int]] = None
@@ -127,6 +125,8 @@ def generate_centroid_slices_with_single_masks(
         List of tuples: (centroid_id, slice_obj, mask_data)
         where mask_data contains only the single segmentation polygon
     """
+
+    from ..utility._rasterize import rasterize_single_polygon
 
     assert len(shape) == 4, "Expected shape of length 4 (C, Z, H, W)"
 
