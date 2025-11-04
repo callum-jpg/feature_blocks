@@ -28,6 +28,7 @@ def compare_cpu_gpu_single_scenario(
     scenario: dict,
     model_name: str,
     block_size: int,
+    output_dir: str,
     n_workers: int = 4,
     gpu_batch_size: int = 32,
     device: str = "cuda"
@@ -65,8 +66,7 @@ def compare_cpu_gpu_single_scenario(
     if not gpu_available and device.casefold() == "cuda":
         raise ValueError("⚠ CUDA not available.")
 
-    output_dir = Path(tempfile.mkdtemp(prefix="benchmark_gpu_"))
-    output_zarr_gpu = output_dir / "output_gpu.zarr"
+    output_zarr_gpu = Path(output_dir) / "output_gpu.zarr"
 
     try:
         gpu_result = benchmark_gpu_inference(
@@ -90,7 +90,7 @@ def compare_cpu_gpu_single_scenario(
     print(f"\n2. CPU Zarr+Dask ({n_workers} workers)")
     print("-" * 40)
 
-    output_zarr_cpu = output_dir / "output_cpu.zarr"
+    output_zarr_cpu = Path(output_dir) / "output_cpu.zarr"
 
     try:
         cpu_result = benchmark_extract(
@@ -162,6 +162,7 @@ def find_crossover_point(
     n_workers: int, 
     gpu_batch_size: int,
     device: str, 
+    output_dir: str,
     temp_dir: Optional[str] = None,
 ) -> Tuple[BenchmarkResults, List[dict]]:
     """
@@ -204,6 +205,7 @@ def find_crossover_point(
             model_name=model_name,
             block_size=blk_size,
             n_workers=n_workers,
+            output_dir=output_dir,
             gpu_batch_size=gpu_batch_size,
             device=device
         )
@@ -244,19 +246,18 @@ def find_crossover_point(
 
 
 if __name__ == "__main__":
-    # Example: Find crossover point
-    print("Finding CPU vs GPU crossover point...")
-
     suite, comparisons = find_crossover_point(
         model_name="tiny_vit",
         block_size=224,
         image_size=(
-            (3, 1, 512, 512),
-            (3, 1, 1024, 1024),
+            # (3, 1, 8_000, 8_000),
+            # (3, 1, 16_000, 16_000),
+            (3, 1, 32_000, 32_000),
         ),
-        n_workers=1,
-        gpu_batch_size=1,
-        device="cpu"
+        n_workers=1000,
+        gpu_batch_size=128,
+        device="cuda",
+        output_dir="data",
     )
 
     # Save results
