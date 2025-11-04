@@ -37,3 +37,9 @@ python_path = "singularity exec singularity_container.simg python"
 
 # Memory allocation per worker for cluster computing
 memory = "16GB"
+
+# Batch size: number of regions to process per task (default: 1)
+# Increasing this reduces task overhead when processing many small regions
+# Recommended values: 1-10 for large regions, 10-50 for small regions
+# Set to 1 to disable batching
+batch_size = 1

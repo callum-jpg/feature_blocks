@@ -18,7 +18,7 @@ from feature_blocks.slice import (filter_slices_by_mask,
                                   generate_centroid_slices_with_single_masks,
                                   generate_nd_slices, normalize_slices)
 from feature_blocks.io import create_ome_zarr_output
-from feature_blocks.task import process_region
+from feature_blocks.task import process_region, process_region_batch
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,8 @@ def extract(
     calculate_mask: bool = False,
     mask_downsample: int = 1,
     masked_block_value=numpy.nan,
-    masking_kwargs: typing.Dict[str, int] = None
+    masking_kwargs: typing.Dict[str, int] = None,
+    batch_size: int = 1
 ):
 
     # component=0 to read the high resolution image
@@ -254,14 +255,31 @@ def extract(
     # Only pass model_identifier for warmup if it's a string (serializable)
     warmup_model = model_identifier if isinstance(model_identifier, str) else None
 
+    # Create batches if batch_size > 1
+    if batch_size > 1:
+        # Create batches of regions
+        batched_regions = [
+            regions[i:i + batch_size]
+            for i in range(0, len(regions), batch_size)
+        ]
+        log.info(f"Batching enabled: {len(regions)} regions -> {len(batched_regions)} batches (batch_size={batch_size})")
+        process_function = process_region_batch
+        tasks = batched_regions
+        function_kwargs_key = "region_batch"
+    else:
+        log.info(f"Batching disabled (batch_size=1)")
+        process_function = process_region
+        tasks = regions
+        function_kwargs_key = "reg"
+
     start_time = time.time()
 
     # Use client.map() for efficient task distribution
-    # This avoids creating 3N delayed objects (read, infer, write per region)
-    # Instead, we create N futures with a single function per region
+    # With batching: creates N/batch_size futures, each processing batch_size regions
+    # Without batching (batch_size=1): creates N futures, each processing 1 region
     run_dask_backend(
-        process_region,
-        regions,
+        process_function,
+        tasks,
         n_workers=n_workers,
         python_path=python_path,
         memory=memory,

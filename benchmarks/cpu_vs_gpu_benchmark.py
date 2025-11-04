@@ -31,7 +31,8 @@ def compare_cpu_gpu_single_scenario(
     output_dir: str,
     n_workers: int = 4,
     gpu_batch_size: int = 32,
-    device: str = "cuda"
+    device: str = "cuda",
+    cpu_batch_size: int = 1,
 ) -> Tuple[BenchmarkResults, dict]:
     """
     Compare CPU and GPU approaches for a single scenario.
@@ -43,6 +44,7 @@ def compare_cpu_gpu_single_scenario(
         n_workers: Number of CPU workers for zarr+dask
         gpu_batch_size: Batch size for GPU inference
         device: "cuda" or "cpu"
+        cpu_batch_size: Number of regions to process per task for CPU (default: 1)
 
     Returns:
         Tuple of (BenchmarkResults, comparison_dict)
@@ -102,7 +104,8 @@ def compare_cpu_gpu_single_scenario(
             n_workers=n_workers,
             image_size=image_size,
             block_method="block",
-            backend="local"
+            backend="local",
+            batch_size=cpu_batch_size,
         )
         suite.add_result(cpu_result)
         print(f"✓ CPU completed in {cpu_result.total_time:.2f}s")
@@ -160,11 +163,12 @@ def find_crossover_point(
     model_name: str,
     block_size: Tuple[int] | int,
     image_size: Tuple[int, int, int, int],
-    n_workers: int, 
+    n_workers: int,
     gpu_batch_size: int,
-    device: str, 
+    device: str,
     output_dir: str,
     temp_dir: Optional[str] = None,
+    cpu_batch_size: int = 1,
 ) -> Tuple[BenchmarkResults, List[dict]]:
     """
     Find the crossover point where zarr+dask becomes faster than GPU batching.
@@ -174,9 +178,13 @@ def find_crossover_point(
     Args:
         model_name: Model name
         block_size: Block size
+        image_size: Image sizes to test
         n_workers: CPU workers
         gpu_batch_size: GPU batch size
+        device: "cuda" or "cpu"
+        output_dir: Output directory
         temp_dir: Temporary directory
+        cpu_batch_size: Number of regions to process per task for CPU (default: 1)
 
     Returns:
         Tuple of (BenchmarkResults, comparisons_list)
@@ -208,7 +216,8 @@ def find_crossover_point(
             n_workers=n_workers,
             output_dir=output_dir,
             gpu_batch_size=gpu_batch_size,
-            device=device
+            device=device,
+            cpu_batch_size=cpu_batch_size,
         )
 
         # Add results to main suite

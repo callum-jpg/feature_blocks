@@ -52,6 +52,12 @@ python_path = "python"
 # CellProfiler feature extraction is lightweight but consider segmentation count
 memory = "8GB"
 
+# Batch size: number of regions to process per task (default: 1)
+# For CellProfiler with many small segmentations, higher batch sizes reduce overhead
+# Recommended values: 10-50 for many small cells, 1-10 for large objects
+# Set to 1 to disable batching
+batch_size = 10
+
 # Notes:
 # - 3-channel images will be converted to grayscale using skimage.color.rgb2gray
 # - Multi-channel images (>3 channels) will use mean conversion

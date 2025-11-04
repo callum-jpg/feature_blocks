@@ -44,6 +44,7 @@ def extract(config_file: str):
         calculate_mask=config.get("calculate_mask"),
         mask_downsample=config.get("mask_downsample"),
         masking_kwargs=config.get("masking_kwargs"),
+        batch_size=config.get("batch_size", 1),
     )
 
 

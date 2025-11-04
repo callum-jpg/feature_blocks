@@ -23,6 +23,7 @@ def run_benchmark(
     n_regions=None,
     backend: str = "local",
     track_memory: bool = True,
+    batch_size: Tuple[int] | int = 1,
 ) -> BenchmarkResults:
 
     scenarios = create_scenarios(
@@ -34,6 +35,11 @@ def run_benchmark(
     if isinstance(worker_counts, int):
         worker_counts = [worker_counts]
 
+    if isinstance(batch_size, int):
+        batch_sizes = [batch_size]
+    else:
+        batch_sizes = batch_size
+
     benchmark_results = BenchmarkResults()
 
     for scenario in scenarios:
@@ -43,32 +49,34 @@ def run_benchmark(
         blk_size = scenario["block_size"]
 
         for n_workers in worker_counts:
-            output_zarr = Path(output_dir) / f"{scenario_name}_w{n_workers}.zarr"
+            for batch_sz in batch_sizes:
+                output_zarr = Path(output_dir) / f"{scenario_name}_w{n_workers}_b{batch_sz}.zarr"
 
-            # Remove output if exists
-            if output_zarr.exists():
-                shutil.rmtree(output_zarr)
+                # Remove output if exists
+                if output_zarr.exists():
+                    shutil.rmtree(output_zarr)
 
-            try:
-                result = benchmark_extract(
-                    input_zarr_path=input_zarr,
-                    output_zarr_path=str(output_zarr),
-                    model_name=model_name,
-                    block_size=blk_size,
-                    n_workers=n_workers,
-                    image_size=image_size,
-                    block_method="block",
-                    # backend="local"
-                )
+                try:
+                    result = benchmark_extract(
+                        input_zarr_path=input_zarr,
+                        output_zarr_path=str(output_zarr),
+                        model_name=model_name,
+                        block_size=blk_size,
+                        n_workers=n_workers,
+                        image_size=image_size,
+                        block_method="block",
+                        batch_size=batch_sz,
+                        # backend="local"
+                    )
 
-                benchmark_results.add_result(result)
+                    benchmark_results.add_result(result)
 
-            except Exception as e:
-                print(f"Failed with {n_workers} workers: {e}")
+                except Exception as e:
+                    print(f"Failed with {n_workers} workers and batch_size {batch_sz}: {e}")
 
-            # Cleanup output
-            if output_zarr.exists():
-                shutil.rmtree(output_zarr)
+                # Cleanup output
+                if output_zarr.exists():
+                    shutil.rmtree(output_zarr)
 
     return benchmark_results
 
@@ -84,6 +92,7 @@ def benchmark_extract(
     segmentations_path: Optional[str] = None,
     backend: str = "local",
     track_memory: bool = True,
+    batch_size: int = 1,
 ) -> BenchmarkResults:
     """
     Benchmark feature_blocks extraction with zarr+dask.
@@ -99,6 +108,7 @@ def benchmark_extract(
         segmentations_path: Path to segmentations GeoJSON (for centroid method)
         backend: Dask backend ("local", "slurm", etc.)
         track_memory: Whether to track memory usage
+        batch_size: Number of regions to process per task (default: 1)
 
     Returns:
         BenchmarkResult object
@@ -115,6 +125,7 @@ def benchmark_extract(
     print(f"  Block size: {block_size}")
     print(f"  Block method: {block_method}")
     print(f"  Workers: {n_workers}")
+    print(f"  Batch size: {batch_size}")
     print(f"  Expected chunks: {n_chunks}")
 
     # Run extraction
@@ -129,6 +140,7 @@ def benchmark_extract(
             n_workers=n_workers,
             block_method=block_method,
             segmentations=segmentations_path,
+            batch_size=batch_size,
             # backend=backend
         )
 
@@ -156,6 +168,7 @@ def benchmark_extract(
             n_chunks=n_chunks,
             block_size=block_size,
             n_workers=n_workers,
+            batch_size=batch_size,
             model_name=model_name,
             method="zarr_dask",
             total_time=total_time,
@@ -179,8 +192,7 @@ def benchmark_extract(
 
 
 if __name__ == "__main__":
-    # Example: Test worker scaling on medium-sized image
-    print("Running worker scaling analysis...")
+    print("Running worker scaling and batch size analysis...")
 
     results = run_benchmark(
         model_name="dummy",
@@ -192,7 +204,8 @@ if __name__ == "__main__":
         n_regions=None,
         track_memory=False,
         output_dir="data",
+        batch_size=[1, 5, 10],  # Test multiple batch sizes
     )
 
     # Save results
-    results.save("data/benchmarking/image_size_scaling_benchmark_v4.json")
+    results.save("data/benchmarking/image_size_scaling_benchmark_v5.json")

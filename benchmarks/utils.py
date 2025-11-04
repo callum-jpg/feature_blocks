@@ -39,6 +39,7 @@ class BenchmarkResults:
     n_chunks: Optional[int] = None
     block_size: Optional[int] = None
     n_workers: Optional[int] = None
+    batch_size: Optional[int] = None
     model_name: Optional[str] = None
     method: Optional[str] = None  # e.g. "zarr_dask", "gpu_batch", "in_memory"
 
