@@ -260,15 +260,16 @@ if __name__ == "__main__":
         model_name="tiny_vit",
         block_size=224,
         image_size=(
-            (3, 1, 1024, 1024),
+            # (3, 1, 1024, 1024),
             # (3, 1, 8_000, 8_000),
             # (3, 1, 16_000, 16_000),
-            # (3, 1, 32_000, 32_000),
+            (3, 1, 32_000, 32_000),
         ),
-        n_workers=1000,
-        gpu_batch_size=128,
-        device="cpu",
-        output_dir="data",
+        n_workers=100,
+        gpu_batch_size=32,
+        cpu_batch_size=1,
+        device="cuda",
+        output_dir="data/benchmarking",
     )
 
     # Save results

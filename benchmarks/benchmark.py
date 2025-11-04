@@ -192,19 +192,23 @@ def benchmark_extract(
 
 
 if __name__ == "__main__":
-    print("Running worker scaling and batch size analysis...")
+    print("Running scaling analysis...")
 
     results = run_benchmark(
         model_name="dummy",
-        block_size=[128, 256],
-        worker_counts=[4, 8],
-        image_size=[(3, 1, 256, 256), (3, 1, 512, 512)],
+        block_size=[224],
+        worker_counts=[50, 100, 150, 200],
+        image_size=[
+            # (3, 1, 256, 256), 
+            # (3, 1, 512, 512)
+            (3, 1, 32000, 32000),
+        ],
         block_method="block",
         segmentations_path=None,
         n_regions=None,
         track_memory=False,
-        output_dir="data",
-        batch_size=[1, 5, 10],  # Test multiple batch sizes
+        output_dir="data/benchmarking",
+        batch_size=[1, 5, 10], 
     )
 
     # Save results
