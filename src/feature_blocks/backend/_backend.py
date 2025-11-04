@@ -4,8 +4,7 @@ from typing import Callable
 import traceback
 
 import dask
-from dask.distributed import (Client, LocalCluster, as_completed,
-                              performance_report, progress)
+from dask.distributed import Client, progress, wait, performance_report
 from distributed.utils import silence_logging_cmgr
 from ._zarr_plugin import ZarrHandlePlugin
 
@@ -58,7 +57,7 @@ def run_dask_backend(
 
         cluster = SLURMCluster(
             n_workers=n_workers,
-            cores=1,
+            cores=2,
             memory=memory,
             walltime="08:00:00",
             log_directory="logs",
@@ -156,26 +155,12 @@ def run_dask_backend(
         futures = client.map(function, regions, pure=True, **function_kwargs)
         progress(futures, notebook=False)
 
-    # Process results with timeout
-    completed_count = 0
-    failed_indices = []
+    # Just ensure all tasks are finished (and handle errors)
+    wait(futures, timeout=600 * len(regions))
 
-    for i, future in enumerate(as_completed(futures, timeout=600 * len(regions))):
-        try:
-            # Get result with individual timeout
-            result = future.result(timeout=600)
-
-            completed_count += 1
-            if completed_count % 1000 == 0:  # Progress update every 1000 tasks
-                print(f"Completed {completed_count}/{len(regions)} tasks")
-
-        except Exception as e:
-            tb = traceback.extract_tb(e.__traceback__)
-            func_name = tb[-1].name  # the last function in the traceback (where it failed)
-            print(f"Task {i} failed in function '{func_name}': {e}.")
-            failed_indices.append(i)
-
-    print(f"Completed: {completed_count}, Failed: {len(failed_indices)}")
+    failed = [f for f in futures if f.status == "error"]
+    if failed:
+        print(f"{len(failed)} tasks failed.")
 
     # Silence cluster shutdown
     with silence_logging_cmgr(logging.CRITICAL):
