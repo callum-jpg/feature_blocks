@@ -40,6 +40,7 @@ def run_dask_backend(
     n_workers: int | None = None,
     python_path: str = "python",
     memory: str = "16GB",
+    batch_size: int = 1,
     model_identifier: str | None = None,
     input_zarr_path: str | None = None,
     output_zarr_path: str | None = None,
@@ -149,10 +150,10 @@ def run_dask_backend(
     if function_kwargs is None:
         function_kwargs = {}
 
-    log.info(f"Mapping {function.__name__} over {len(regions)} regions...")
+    log.info(f"Mapping {function.__name__} over {len(regions)} regions with batch_size={batch_size}...")
 
     with performance_report(filename="performance_report.html"):
-        futures = client.map(function, regions, pure=True, **function_kwargs)
+        futures = client.map(function, regions, pure=True, batch_size=batch_size, **function_kwargs)
         progress(futures, notebook=False)
 
     # Just ensure all tasks are finished (and handle errors)
