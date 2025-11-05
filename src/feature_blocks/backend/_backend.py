@@ -106,7 +106,7 @@ def run_dask_backend(
     if visualise_graph:
         log.warning("visualise_graph is not supported with client.map() workflow")
 
-    client = Client(cluster, asynchronous=False)
+    client = Client(cluster, direct_to_workers=True)
 
     # Register ZarrHandlePlugin to keep zarr stores open for worker lifetime
     # This eliminates the overhead of opening/closing stores on every task
@@ -157,7 +157,7 @@ def run_dask_backend(
         progress(futures, notebook=False)
 
     # Just ensure all tasks are finished (and handle errors)
-    wait(futures, timeout=600 * len(regions))
+    wait(futures, timeout=1)
 
     failed = [f for f in futures if f.status == "error"]
     if failed:
