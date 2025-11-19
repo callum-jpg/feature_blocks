@@ -7,6 +7,8 @@ import zarr
 from ome_zarr.format import CurrentFormat
 from ome_zarr.io import parse_url
 
+from zarr.codecs import BloscCodec
+
 log = logging.getLogger(__name__)
 
 
@@ -15,6 +17,7 @@ def create_ome_zarr_output(
     shape: tuple,
     chunks: tuple,
     dtype=numpy.float32,
+    shards = None,
     axes: list = None,
     compressor=None,
     synchronizer=None,
@@ -56,14 +59,15 @@ def create_ome_zarr_output(
 
     # Set default compressor if not provided
     if compressor is None:
-        compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+        compressor = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
 
     # Create the array directly in the root group
     # For feature data, we typically don't need multi-resolution pyramids
-    array = root.create_dataset(
+    array = root.create_array(  
         "0",  # OME-Zarr uses "0" for the full-resolution data
         shape=shape,
         chunks=chunks,
+        shards=shards,
         dtype=dtype,
         compressor=compressor,
         fill_value=fill_value,
@@ -126,56 +130,3 @@ def create_ome_zarr_output(
     log.info(f"  Compressor: {compressor}")
 
     return array
-
-
-def write_to_ome_zarr(zarr_path: str, data: numpy.ndarray, region: tuple):
-    """
-    Write data to an OME-Zarr store.
-
-    This function is compatible with the existing write interface but
-    works with OME-Zarr formatted stores.
-
-    Args:
-        zarr_path: Path to the OME-Zarr store
-        data: Data to write
-        region: Region to write to (as slice objects or indices)
-    """
-    # Open the OME-Zarr store
-    store = parse_url(zarr_path, mode="r+").store
-    root = zarr.group(store=store)
-
-    # Access the full-resolution data (always at path "0")
-    z = root["0"]
-
-    if len(region) == 4:
-        # Feature block
-        z[tuple(region)] = data
-    elif len(region) == 2:
-        # ROI features - squeeze to drop ZYX dimensions
-        z[tuple(region)] = data.squeeze()
-
-
-def read_from_ome_zarr(zarr_path: str, region: tuple):
-    """
-    Read data from an OME-Zarr store.
-
-    Args:
-        zarr_path: Path to the OME-Zarr store
-        region: Region to read (as slice objects or indices)
-
-    Returns:
-        numpy.ndarray: The requested data
-    """
-    # Open the OME-Zarr store
-    store = parse_url(zarr_path, mode="r").store
-    root = zarr.group(store=store)
-
-    # Access the full-resolution data (always at path "0")
-    z = root["0"]
-
-    if len(region) == 4:
-        # Read a block
-        return z[region]
-    elif len(region) == 2:
-        # Read a ROI
-        return z[region[1:]]

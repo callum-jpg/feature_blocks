@@ -37,6 +37,7 @@ def extract(config_file: str):
         segmentations=segmentations,
         block_method=config.get("block_method", "block"),
         block_size=config.get("block_size"),
+        shard_size=config.get("shard_size", None),
         output_zarr_path=config.get("save_path"),
         n_workers=config.get("n_workers", 1),
         python_path=config.get("python_path", "python"),
@@ -101,11 +102,15 @@ def load_and_process_image(config: dict) -> Path:
         shape = image.shape
         chunks = image.chunksize
 
+        if shard_size is None:
+            shard_size = chunk_size
+
         # Create OME-Zarr output
         zarr_store = create_ome_zarr_output(
             output_zarr_path=zarr_path.as_posix(),
             shape=shape,
             chunks=chunks,
+            shards=shards,
             dtype=image.dtype,
             axes=["c", "z", "y", "x"],
             fill_value=0.0,

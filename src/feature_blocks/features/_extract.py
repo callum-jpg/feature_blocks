@@ -10,7 +10,7 @@ import skimage
 import zarr
 from tqdm import tqdm
 
-from feature_blocks.backend import run_dask_backend
+from feature_blocks.backend import run_dask_backend, run_sequential_backend
 from feature_blocks.image import tissue_detection
 from feature_blocks.models import available_models
 from feature_blocks.slice import (filter_slices_by_mask,
@@ -20,6 +20,8 @@ from feature_blocks.slice import (filter_slices_by_mask,
 from feature_blocks.io import create_ome_zarr_output
 from feature_blocks.task import process_region
 
+from zarr.codecs import BloscCodec
+
 log = logging.getLogger(__name__)
 
 
@@ -28,6 +30,9 @@ def extract(
     feature_extraction_method: str,
     block_size: int,
     output_zarr_path: str,
+    backend: str = "dask",
+    device: str = "auto",
+    batch_size: int = 1,
     n_workers: int | None = None,
     python_path: str = "python",
     memory: str = "16GB",
@@ -37,13 +42,12 @@ def extract(
     mask_downsample: int = 1,
     masked_block_value=numpy.nan,
     masking_kwargs: typing.Dict[str, int] = None,
-    batch_size: int = 1
 ):
 
     # component=0 to read the high resolution image
     # We mostly load input_data here to get it's shape. If required,
     # it will be computed for mask creation.
-    input_data = dask.array.from_zarr(input_zarr_path, component=0)
+    input_data = dask.array.from_zarr(input_zarr_path, component="0")
 
     if segmentations is not None:
         # Check if any segmentations are not valid
@@ -96,8 +100,8 @@ def extract(
         # Prepare output zarr file with synchronizer for safe parallel writes
         # and compression to reduce I/O bottleneck
         # Use OME-Zarr format for cloud-optimized storage
-        synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
-        compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+        # synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
+        compressor = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
 
         output_data = create_ome_zarr_output(
             output_zarr_path=output_zarr_path,
@@ -106,7 +110,7 @@ def extract(
             dtype=numpy.float32,
             axes=["c", "z", "y", "x"],
             compressor=compressor,
-            synchronizer=synchronizer,
+            # synchronizer=synchronizer,
             fill_value=numpy.nan,
         )
 
@@ -242,8 +246,9 @@ def extract(
             len(regions) > 0
         ), "No foreground regions found after masking. Adjust or disable masking."
 
-    # Prepare task parameters
-    log.info(f"Preparing to process {len(regions)} regions using client.map()...")
+    # Validate backend selection
+    if backend not in ["dask", "sequential"]:
+        raise ValueError(f"backend must be 'dask' or 'sequential', got '{backend}'")
 
     # Determine model identifier to pass (string if possible for efficiency)
     if isinstance(feature_extraction_method, str):
@@ -252,33 +257,50 @@ def extract(
         # If a callable was passed directly, use it (less efficient but supported)
         model_identifier = feature_extract_fn
 
-    # Only pass model_identifier for warmup if it's a string (serializable)
-    warmup_model = model_identifier if isinstance(model_identifier, str) else None
-
     start_time = time.time()
 
-    # Use client.map() with batch_size parameter for efficient task distribution
-    run_dask_backend(
-        process_region,
-        regions,
-        n_workers=n_workers,
-        python_path=python_path,
-        memory=memory,
-        batch_size=batch_size,
-        model_identifier=warmup_model,
-        input_zarr_path=input_zarr_path,
-        output_zarr_path=output_zarr_path,
-        mask_store_path=mask_store_path,
-        function_kwargs={
-            "input_zarr_path": input_zarr_path,
-            "model_identifier": model_identifier,
-            "n_features": feature_extract_fn.n_features,
-            "output_zarr_path": output_zarr_path,
-            "block_size": block_size,
-            "output_chunks": output_chunks,
-            "mask_store_path": mask_store_path,
-        },
-    )
+    if backend == "dask":
+        # Use Dask distributed backend
+        log.info(f"Preparing to process {len(regions)} regions using Dask backend...")
+
+        run_dask_backend(
+            process_region,
+            regions,
+            n_workers=n_workers,
+            python_path=python_path,
+            memory=memory,
+            batch_size=batch_size,
+            input_zarr_path=input_zarr_path,
+            output_zarr_path=output_zarr_path,
+            mask_store_path=mask_store_path,
+            function_kwargs={
+                "input_zarr_path": input_zarr_path,
+                "model_identifier": model_identifier,
+                "n_features": feature_extract_fn.n_features,
+                "output_zarr_path": output_zarr_path,
+                "block_size": block_size,
+                "output_chunks": output_chunks,
+                "mask_store_path": mask_store_path,
+            },
+        )
+
+    elif backend == "sequential":
+        # Use sequential backend (Dask-free, with GPU/CPU batching)
+        log.info(f"Preparing to process {len(regions)} regions using sequential backend on {device}...")
+
+        run_sequential_backend(
+            regions=regions,
+            model_identifier=model_identifier,
+            input_zarr_path=input_zarr_path,
+            output_zarr_path=output_zarr_path,
+            block_method=block_method,
+            block_size=block_size,
+            output_chunks=output_chunks,
+            device=device,
+            batch_size=batch_size,
+            mask_store_path=mask_store_path,
+        )
+
     elapsed = time.time() - start_time
     log.info(f"Analysis time: {str(timedelta(seconds=round(elapsed)))}")
 
