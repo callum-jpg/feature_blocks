@@ -13,7 +13,7 @@ import os
 
 from feature_blocks.features import extract
 from feature_blocks.models.cellprofiler import CellProfiler
-from feature_blocks.io import create_ome_zarr_output
+from feature_blocks.io import save_ome_zarr
 
 
 class TestCellProfilerExtraction:
@@ -64,15 +64,12 @@ class TestCellProfilerExtraction:
 
         # Save as zarr
         image_path = os.path.join(temp_dir, "synthetic_image2.zarr")
-        zarr_store = create_ome_zarr_output(
-                output_zarr_path=image_path,
-                shape=image_shape,
+        zarr_store = save_ome_zarr(
+                array = image,
+                output_path=image_path,
                 chunks=(1, 1, 256, 256),
-                dtype=numpy.float32,
-                axes=["c", "z", "y", "x"],
-                fill_value=0.0,
+                axes="czyx",
             )
-        zarr_store[:] = image
 
         return image_path, image
 

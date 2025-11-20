@@ -95,29 +95,21 @@ def load_and_process_image(config: dict) -> Path:
     if zarr_exists(zarr_path, image, full_input_validation=config.get("full_input_validation")):
         log.info(f"Saving image as chunked OME-Zarr to: {zarr_path}")
         # Save to OME-Zarr format
-        from feature_blocks.io import create_ome_zarr_output
+        from feature_blocks.io import save_ome_zarr
         import numpy
 
         # Get the shape and chunks from the dask array
         shape = image.shape
         chunks = image.chunksize
 
-        if shard_size is None:
-            shard_size = chunk_size
-
         # Create OME-Zarr output
-        zarr_store = create_ome_zarr_output(
-            output_zarr_path=zarr_path.as_posix(),
-            shape=shape,
+        save_ome_zarr(
+            array=image,
+            output_path=zarr_path.as_posix(),
             chunks=chunks,
-            shards=shards,
-            dtype=image.dtype,
-            axes=["c", "z", "y", "x"],
-            fill_value=0.0,
+            shards=shard_size,
+            compression="zstd"
         )
-
-        # Write the data
-        image.to_zarr(zarr_store, compute=True)
     else:
         log.info(f"Loading existing zarr store: {zarr_path}")
 

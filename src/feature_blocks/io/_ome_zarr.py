@@ -1,132 +1,92 @@
-"""OME-Zarr format utilities for cloud-optimized storage."""
-
-import logging
-
 import numpy
 import zarr
-from ome_zarr.format import CurrentFormat
+from pathlib import Path
+from typing import Union, Optional, Tuple, Dict, Any
+import dask.array
 from ome_zarr.io import parse_url
-
+from ome_zarr.writer import write_image
 from zarr.codecs import BloscCodec
 
-log = logging.getLogger(__name__)
 
-
-def create_ome_zarr_output(
-    output_zarr_path: str,
-    shape: tuple,
-    chunks: tuple,
-    dtype=numpy.float32,
-    shards = None,
-    axes: list = None,
-    compressor=None,
-    synchronizer=None,
-    fill_value=numpy.nan,
-):
+def save_ome_zarr(
+    array: Union[numpy.ndarray, dask.array.Array],
+    output_path: Union[str, Path],
+    chunks: Optional[Tuple[int, ...]] = None,
+    shards: Optional[Tuple[int, ...]] = None,
+    axes: Optional[str] = None,
+    compression: str = None,
+) -> None:
     """
-    Create an OME-Zarr store for output features.
-
-    OME-Zarr is a cloud-optimized format that includes metadata following
-    the OME (Open Microscopy Environment) specification.
-
-    Args:
-        output_zarr_path: Path to output zarr store
-        shape: Shape of the output array
-        chunks: Chunk size for the array
-        dtype: Data type for the array
-        axes: List of axis names (e.g., ["c", "z", "y", "x"])
-        compressor: Zarr compressor to use
-        synchronizer: Zarr synchronizer for parallel writes
-        fill_value: Value to use for uninitialized chunks
-
-    Returns:
-        zarr.Array: The created array
+    Save a numpy or dask array as an OME-Zarr file with Zarr v3 and sharding support.
+    
+    Parameters
+    ----------
+    array : numpy.ndarray or dask.array.Array
+        The input array to save. Can be 2D-5D (e.g., YX, ZYX, CYX, TZYX, TCZYX).
+    output_path : str or Path
+        Path where the OME-Zarr file will be saved.
+    chunks : tuple of int, optional
+        Chunk size for the array. If None, uses array chunks (for dask) or auto-chunks.
+    shards : tuple of int, optional
+        Shard size for Zarr v3. Should be multiples of chunks. If None, no sharding.
+    axes : str, optional
+        Axis labels (e.g., "tczyx", "zyx"). If None, inferred from array dimensions.
     """
-    # Default axes for feature data
+    output_path = Path(output_path)
+    
+    # Infer axes if not provided
     if axes is None:
-        if len(shape) == 4:
-            axes = ["c", "z", "y", "x"]
-        elif len(shape) == 2:
-            # For 2D feature data, treat as 1D spatial + channels
-            # OME-Zarr requires at least one spatial axis
-            axes = ["y", "c"]  # y (observations as spatial dimension), c (features)
+        ndim = array.ndim
+        axes_map = {
+            2: "yx",
+            3: "zyx",
+            4: "czyx",
+            5: "tczyx"
+        }
+        axes = axes_map.get(ndim, "".join([f"dim_{i}" for i in range(ndim)]))
+    
+    axes = axes.lower()
+    
+    # Handle chunks
+    if chunks is None:
+        if isinstance(array, dask.array.Array):
+            chunks = array.chunksize
         else:
-            axes = [f"axis_{i}" for i in range(len(shape))]
+            # Auto-chunk based on array size
+            chunks = tuple(min(s, 256) for s in array.shape)
+    
+    # Create zarr store with v3
+    store = parse_url(output_path, mode="w").store
+    
+    # Create root group with zarr v3
+    root = zarr.group(store=store, zarr_format=3, overwrite=True)
+    
+    # Prepare storage options for sharding
+    storage_options = {
+        "chunks": chunks,
+    }
+    
+    if shards is not None:
+        # Zarr v3 sharding configuration
+        storage_options["shards"] = shards
 
-    # Create the zarr store with OME-Zarr metadata
-    store = parse_url(output_zarr_path, mode="w").store
-    root = zarr.group(store=store, overwrite=True, synchronizer=synchronizer)
-
-    # Set default compressor if not provided
-    if compressor is None:
+    if compression == "zstd":
         compressor = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
-
-    # Create the array directly in the root group
-    # For feature data, we typically don't need multi-resolution pyramids
-    array = root.create_array(  
-        "0",  # OME-Zarr uses "0" for the full-resolution data
-        shape=shape,
-        chunks=chunks,
-        shards=shards,
-        dtype=dtype,
-        compressor=compressor,
-        fill_value=fill_value,
-        overwrite=True,
+    else:
+        compressor = None
+    
+    # Write the image data using ome_zarr
+    write_image(
+        image=array,
+        group=root,
+        axes=axes,
+        storage_options=storage_options,
+        compute=True,  # Compute immediately for dask arrays
+        compressors=compressor,
+        scaler=None, # Do not create a resolution pyramid
     )
 
-    # Write OME-Zarr metadata
-    # This makes the data compatible with OME-Zarr viewers and tools
-    fmt = CurrentFormat()
-
-    # Create coordinate transformations (identity for now)
-    coordinate_transformations = [[{"type": "identity"}]]
-
-    # Write the multiscales metadata
-    # Map axis names to OME-Zarr types (space, time, or channel)
-    axis_type_map = {
-        "x": "space",
-        "y": "space",
-        "z": "space",
-        "c": "channel",
-        "t": "time",
-    }
-
-    multiscales = [
-        {
-            "version": fmt.version,
-            "name": "features",
-            "axes": [
-                {"name": ax, "type": axis_type_map.get(ax, "space")} for ax in axes
-            ],
-            "datasets": [
-                {
-                    "path": "0",
-                    "coordinateTransformations": coordinate_transformations[0],
-                }
-            ],
-            "coordinateTransformations": coordinate_transformations,
-        }
-    ]
-
-    root.attrs["multiscales"] = multiscales
-
-    # Add omero metadata for visualization (optional but helpful)
-    if len(shape) == 4:  # Standard image-like data
-        root.attrs["omero"] = {
-            "channels": [
-                {
-                    "label": f"feature_{i}",
-                    "color": "FFFFFF",
-                    "window": {"start": 0, "end": 1, "min": 0, "max": 1},
-                }
-                for i in range(shape[0])
-            ]
-        }
-
-    log.info(f"Created OME-Zarr output at {output_zarr_path}")
-    log.info(f"  Shape: {shape}")
-    log.info(f"  Chunks: {chunks}")
-    log.info(f"  Axes: {axes}")
-    log.info(f"  Compressor: {compressor}")
-
-    return array
+    z = zarr.open(output_path)["0"]
+    
+    print(f"Successfully saved OME-Zarr to {output_path}")
+    print(z.info_complete())

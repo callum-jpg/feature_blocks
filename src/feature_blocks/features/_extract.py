@@ -17,7 +17,7 @@ from feature_blocks.slice import (filter_slices_by_mask,
                                   generate_centroid_slices,
                                   generate_centroid_slices_with_single_masks,
                                   generate_nd_slices, normalize_slices)
-from feature_blocks.io import create_ome_zarr_output
+from feature_blocks.io import save_ome_zarr
 from feature_blocks.task import process_region
 
 from zarr.codecs import BloscCodec
@@ -97,21 +97,15 @@ def extract(
             num_chunks_x * output_chunks[3],
         )  # (C, Z, Y, X)
 
-        # Prepare output zarr file with synchronizer for safe parallel writes
-        # and compression to reduce I/O bottleneck
-        # Use OME-Zarr format for cloud-optimized storage
-        # synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
-        compressor = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
+        placeholder_output_data = numpy.empty(output_shape)
+        placeholder_output_data.fill(numpy.nan)
 
-        output_data = create_ome_zarr_output(
-            output_zarr_path=output_zarr_path,
-            shape=output_shape,
+        save_ome_zarr(
+            array=placeholder_output_data,
+            output_path=output_zarr_path,
             chunks=output_chunks,
-            dtype=numpy.float32,
-            axes=["c", "z", "y", "x"],
-            compressor=compressor,
-            # synchronizer=synchronizer,
-            fill_value=numpy.nan,
+            axes="czyx",
+            compression="zstd",
         )
 
         # No mask store needed for block method
@@ -173,7 +167,7 @@ def extract(
                     store=mask_store_path,
                     overwrite=True,
                     fill_value=0,
-                    compressor=zarr.Blosc(cname="zstd", clevel=1),
+                    # compressor=BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle"),
                 )
 
                 # Write all masks to zarr in parallel using numpy array operations
@@ -200,21 +194,15 @@ def extract(
 
         output_chunks = (1, feature_extract_fn.n_features)
 
-        # Prepare output zarr file with synchronizer for safe parallel writes
-        # and compression to reduce I/O bottleneck
-        # Use OME-Zarr format for tabular feature data (observations x features)
-        synchronizer = zarr.ProcessSynchronizer(f"{output_zarr_path}.sync")
-        compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+        placeholder_output_data = numpy.empty(output_shape)
+        placeholder_output_data.fill(numpy.nan)
 
-        output_data = create_ome_zarr_output(
-            output_zarr_path=output_zarr_path,
-            shape=output_shape,
+        save_ome_zarr(
+            array=placeholder_output_data,
+            output_path=output_zarr_path,
             chunks=output_chunks,
-            dtype=numpy.float32,
-            axes=["y", "c"],  # y (observations), c (features)
-            compressor=compressor,
-            synchronizer=synchronizer,
-            fill_value=numpy.nan,
+            axes="cy",  # c (observations), y (features)
+            compression="zstd",
         )
     else:
         raise ValueError(f"block_method '{block_method}' not recognised.")

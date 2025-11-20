@@ -12,7 +12,7 @@ import geopandas as gpd
 import numpy as np
 from shapely.geometry import Polygon
 
-from feature_blocks.io import create_ome_zarr_output
+from feature_blocks.io import save_ome_zarr
 
 
 def create_synthetic_image_zarr(
@@ -90,25 +90,16 @@ def create_synthetic_image_zarr(
     else:
         raise ValueError(f"Unknown pattern: {pattern}")
 
-    # if shard_size is None:
-    #     shard_size = chunk_size
-
     # Convert to dask array for efficient writing
     data = dask.array.from_array(data, chunks=chunk_size)
 
     # Create OME-Zarr
-    zarr_store = create_ome_zarr_output(
-        output_zarr_path=output_path,
-        shape=image_size,
+    zarr_store = save_ome_zarr(
+        array=data,
+        output_path=output_path,
         chunks=chunk_size,
         shards = shard_size,
-        dtype=data.dtype,
-        axes=["c", "z", "y", "x"],
-        fill_value=0.0,
     )
-
-    # Write the data
-    data.to_zarr(zarr_store, compute=True)
 
     print(f"Created synthetic zarr at {output_path}")
     print(f"  Shape: {image_size}")
