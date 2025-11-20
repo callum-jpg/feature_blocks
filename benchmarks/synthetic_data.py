@@ -270,9 +270,15 @@ def create_scenarios(
         for shd_sz in shard_size:
             for img_sz in image_size:
                 for n_reg in n_regions:
+
+                    scenario_name = f"image_size_{img_sz[-1]}_block_size_{blk_sz}"
+                    
+                    if shd_sz is not None:
+                        scenario_name += f"_shard_size_{shd_sz}"
+
                     scenarios.append(
                         create_test_scenario(
-                            name=f"image_size_{img_sz}_block_size_{blk_sz}",
+                            name=scenario_name,
                             base_dir=base_dir,
                             image_size=img_sz,
                             block_size=blk_sz,
