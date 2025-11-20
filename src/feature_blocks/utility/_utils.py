@@ -1,6 +1,7 @@
 import numpy
 from spatialdata.models import SpatialElement
 from xarray import DataTree
+from numcodecs import Blosc
 
 
 def get_spatial_element(
@@ -67,3 +68,28 @@ def normalise_rgb(image, mean, std):
         image[:, :, i] = (image[:, :, i] - mean[i]) / std[i]
 
     return image
+
+def estimate_disk_storage_usage(array=None, size=None, dtype=numpy.uint8, compression=None):
+    """
+    Returns estimated size on disk in MB
+    """
+
+    assert array is not None or size is not None, "Must provide one of array or size"
+
+    assert not (array is not None and size is not None), \
+        "Must provide either an array or size, not both."
+
+    if size is not None:
+        array = numpy.random.randint(
+            0, 256,
+            size=size,
+            dtype=dtype,
+        )
+
+    if compression == 'zstd':
+        compressor = Blosc(cname='zstd', clevel=3, shuffle=Blosc.BITSHUFFLE)
+        sample_data = compressor.encode(sample_data)
+
+    compressed_size = len(compressed) / 1024 / 1024
+
+    return round(compressed_size, 3)
