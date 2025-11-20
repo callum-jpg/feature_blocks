@@ -20,6 +20,7 @@ def run_benchmark(
     output_dir: str,
     block_method: str = "block",
     segmentations_path: Optional[str] = None,
+    shard_size: Tuple[int] | int = None,
     n_regions=None,
     backend: str = "local",
     track_memory: bool = True,
@@ -29,6 +30,7 @@ def run_benchmark(
     scenarios = create_scenarios(
         base_dir="./data/benchmarking",
         block_size=block_size,
+        shard_size=shard_size,
         image_size=image_size,
     )
 
@@ -36,9 +38,7 @@ def run_benchmark(
         worker_counts = [worker_counts]
 
     if isinstance(batch_size, int):
-        batch_sizes = [batch_size]
-    else:
-        batch_sizes = batch_size
+        batch_size = [batch_size]
 
     benchmark_results = BenchmarkResults()
 
@@ -47,9 +47,10 @@ def run_benchmark(
         input_zarr = os.path.abspath(scenario["image_path"])
         image_size = scenario["image_size"]
         blk_size = scenario["block_size"]
+        shrd_size = scenario["shard_size"]
 
         for n_workers in worker_counts:
-            for batch_sz in batch_sizes:
+            for batch_sz in batch_size:
                 output_zarr = Path(output_dir) / f"{scenario_name}_w{n_workers}_b{batch_sz}.zarr"
 
                 # Remove output if exists
@@ -62,6 +63,7 @@ def run_benchmark(
                         output_zarr_path=str(output_zarr),
                         model_name=model_name,
                         block_size=blk_size,
+                        shard_size=shrd_size,
                         n_workers=n_workers,
                         image_size=image_size,
                         block_method="block",
@@ -75,8 +77,8 @@ def run_benchmark(
                     print(f"Failed with {n_workers} workers and batch_size {batch_sz}: {e}")
 
                 # Cleanup output
-                if output_zarr.exists():
-                    shutil.rmtree(output_zarr)
+                # if output_zarr.exists():
+                    # shutil.rmtree(output_zarr)
 
     return benchmark_results
 
@@ -88,6 +90,7 @@ def benchmark_extract(
     block_size: int,
     n_workers: int,
     image_size: Tuple[int, int, int, int],
+    shard_size: int = None,
     block_method: str = "block",
     segmentations_path: Optional[str] = None,
     backend: str = "local",
@@ -123,6 +126,7 @@ def benchmark_extract(
     print(f"  Model: {model_name}")
     print(f"  Image size: {image_size}")
     print(f"  Block size: {block_size}")
+    print(f"  Shard size: {shard_size}")
     print(f"  Block method: {block_method}")
     print(f"  Workers: {n_workers}")
     print(f"  Batch size: {batch_size}")
@@ -167,6 +171,7 @@ def benchmark_extract(
             image_size=image_size,
             n_chunks=n_chunks,
             block_size=block_size,
+            shard_size=shard_size,
             n_workers=n_workers,
             batch_size=batch_size,
             model_name=model_name,
@@ -194,22 +199,31 @@ def benchmark_extract(
 if __name__ == "__main__":
     print("Running scaling analysis...")
 
+    OUTPUT_DIR = "data/benchmarking2"
+
+    base_img = (3, 1, 256, 256)
+    LEVELS = 1
+
+    image_sizes = [
+        (base_img[0], base_img[1], base_img[2] * 2**i, base_img[3] * 2**i)
+        for i in range(LEVELS + 1)
+    ]
+
     results = run_benchmark(
         model_name="dummy",
         block_size=[224],
-        worker_counts=[50, 100, 150, 200],
-        image_size=[
-            # (3, 1, 256, 256), 
-            # (3, 1, 512, 512)
-            (3, 1, 32000, 32000),
-        ],
+        # shard_size=[224, 448],
+        shard_size=[224],
+        # worker_counts=[1, 2, 4],
+        worker_counts=[1],
+        image_size=image_sizes,
+        batch_size=[1], 
         block_method="block",
         segmentations_path=None,
         n_regions=None,
         track_memory=False,
-        output_dir="data/benchmarking",
-        batch_size=[1, 5, 10], 
+        output_dir=OUTPUT_DIR,
     )
 
     # Save results
-    results.save("data/benchmarking/image_size_scaling_benchmark_v5.json")
+    results.save(f"{OUTPUT_DIR}/image_size_scaling_benchmark_v6.json")

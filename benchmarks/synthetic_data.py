@@ -19,6 +19,7 @@ def create_synthetic_image_zarr(
     output_path: str,
     image_size: Tuple[int, int, int, int],
     chunk_size: Optional[Tuple[int, int, int, int]] = None,
+    shard_size: Optional[Tuple[int, int, int, int]] = None,
     dtype: str = "uint8",
     pattern: str = "random",
     seed: int = 42,
@@ -30,6 +31,7 @@ def create_synthetic_image_zarr(
         output_path: Path to save zarr array
         image_size: (C, Z, H, W) dimensions
         chunk_size: Chunk dimensions (defaults to (C, Z, 512, 512))
+        shard_size: shard dimensions (defaults to chunk_size
         dtype: Data type for array
         pattern: "random", "gradient", or "checkerboard"
         seed: Random seed for reproducibility
@@ -88,14 +90,18 @@ def create_synthetic_image_zarr(
     else:
         raise ValueError(f"Unknown pattern: {pattern}")
 
+    # if shard_size is None:
+    #     shard_size = chunk_size
+
     # Convert to dask array for efficient writing
     data = dask.array.from_array(data, chunks=chunk_size)
 
-    # Create OME-Zarr output using the existing utility
+    # Create OME-Zarr
     zarr_store = create_ome_zarr_output(
         output_zarr_path=output_path,
         shape=image_size,
         chunks=chunk_size,
+        shards = shard_size,
         dtype=data.dtype,
         axes=["c", "z", "y", "x"],
         fill_value=0.0,
@@ -174,6 +180,7 @@ def create_test_scenario(
     name: str,
     image_size: Tuple[int, int, int, int],
     block_size: int,
+    shard_size: int = None,
     n_regions: Optional[int] = None,
     base_dir: Optional[str] = None,
     seed: int = 42,
@@ -191,11 +198,13 @@ def create_test_scenario(
     Returns:
         Dictionary with paths to created files
     """
-    # if base_dir is None:
-    #     base_dir = tempfile.mkdtemp(prefix=f"benchmark_{name}_")
-    # else:
     base_dir = Path(base_dir) / name
     base_dir.mkdir(parents=True, exist_ok=True)
+
+    chunk_size = (image_size[0], image_size[1], block_size, block_size)
+
+    if shard_size is not None:
+        shard_size_tuple = (image_size[0], image_size[1], shard_size, shard_size)
 
     base_dir = Path(base_dir)
 
@@ -207,7 +216,8 @@ def create_test_scenario(
         str(image_path),
         image_size=image_size,
         pattern="random",
-        chunk_size=(image_size[0], image_size[1], block_size, block_size),
+        chunk_size=chunk_size,
+        shard_size=shard_size_tuple,
         seed=seed,
     )
 
@@ -229,6 +239,7 @@ def create_test_scenario(
         "image_size": image_size,
         "n_regions": n_regions,
         "block_size": block_size,
+        "shard_size": shard_size,
         "base_dir": str(base_dir),
     }
 
@@ -239,6 +250,7 @@ def create_scenarios(
     block_size: Union[Tuple[int], int],
     image_size: Union[Tuple[int], Tuple[Tuple[int]]],
     base_dir: str,
+    shard_size: Union[Tuple[int], int]  = None,
     n_regions: Union[Tuple[int], int] = None,
 ) -> List[dict]:
     """
@@ -254,6 +266,9 @@ def create_scenarios(
     if isinstance(block_size, int):
         block_size = [block_size]
 
+    if isinstance(shard_size, int) or shard_size is None:
+        shard_size = [shard_size]
+
     if not all(isinstance(i_s, tuple) for i_s in image_size):
         image_size = image_size
 
@@ -261,17 +276,19 @@ def create_scenarios(
         n_regions = [n_regions]
 
     for blk_sz in block_size:
-        for img_sz in image_size:
-            for n_reg in n_regions:
-                scenarios.append(
-                    create_test_scenario(
-                        name=f"image_size_{img_sz}_block_size_{blk_sz}",
-                        base_dir=base_dir,
-                        image_size=img_sz,
-                        block_size=blk_sz,
-                        n_regions=n_reg,
+        for shd_sz in shard_size:
+            for img_sz in image_size:
+                for n_reg in n_regions:
+                    scenarios.append(
+                        create_test_scenario(
+                            name=f"image_size_{img_sz}_block_size_{blk_sz}",
+                            base_dir=base_dir,
+                            image_size=img_sz,
+                            block_size=blk_sz,
+                            shard_size=shd_sz,
+                            n_regions=n_reg,
+                        )
                     )
-                )
 
     print(f"\nCreated {len(scenarios)} test scenarios")
     return scenarios

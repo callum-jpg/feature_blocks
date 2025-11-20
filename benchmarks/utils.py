@@ -38,6 +38,7 @@ class BenchmarkResults:
     image_size: Optional[Tuple[int, int]] = None
     n_chunks: Optional[int] = None
     block_size: Optional[int] = None
+    shard_size: Optional[int] = None
     n_workers: Optional[int] = None
     batch_size: Optional[int] = None
     model_name: Optional[str] = None

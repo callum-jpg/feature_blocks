@@ -88,6 +88,7 @@ def run_dask_backend(
             cluster = LocalCUDACluster()
             log.info("Using CUDA cluster")
         except:
+            from dask.distributed import LocalCluster
             n_workers = get_n_workers()
             cluster = LocalCluster(
                 n_workers=n_workers,
@@ -119,33 +120,6 @@ def run_dask_backend(
         )
         client.register_plugin(plugin, name='zarr-handle-plugin')
         log.info("ZarrHandlePlugin registered successfully")
-
-    # Pre-load model on all workers to avoid redundant loading
-    # if model_identifier is not None:
-    #     log.info(f"Pre-loading model '{model_identifier}' on all workers...")
-
-    #     def warmup_model(model_name):
-    #         """Load model into worker's local cache."""
-    #         # This will initialize the model in the worker's _model_cache
-    #         # We use a dummy input just to trigger model loading
-    #         import numpy
-
-    #         from feature_blocks.task import infer
-
-    #         dummy_input = numpy.zeros((1, 1, 1, 1), dtype=numpy.float32)
-    #         try:
-    #             infer(dummy_input, model_name)
-    #         except Exception:
-    #             # Some models may fail with dummy input, but the model
-    #             # will still be loaded into the cache
-    #             pass
-    #         return f"Model {model_name} loaded"
-
-    #     # Run warmup on all workers (use actual worker count from cluster)
-    #     actual_workers = len(client.scheduler_info()["workers"])
-    #     warmup_futures = client.map(warmup_model, [model_identifier] * actual_workers)
-    #     client.gather(warmup_futures)
-    #     log.info("Model pre-loading complete")
 
     if function_kwargs is None:
         function_kwargs = {}
