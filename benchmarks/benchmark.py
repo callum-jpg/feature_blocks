@@ -25,6 +25,7 @@ def run_benchmark(
     backend: str = "local",
     track_memory: bool = True,
     batch_size: Tuple[int] | int = 1,
+    csv_path: Optional[str] = None,
 ) -> BenchmarkResults:
 
     scenarios = create_scenarios(
@@ -72,6 +73,10 @@ def run_benchmark(
                     )
 
                     benchmark_results.add_result(result)
+
+                    # Incrementally save to CSV
+                    if csv_path:
+                        result.save_csv(csv_path, append=True)
 
                 except Exception as e:
                     print(f"Failed with {n_workers} workers and batch_size {batch_sz}: {e}")

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple, Any
 import json
 import numpy as np
+import pandas as pd
 
 @dataclass
 class BenchmarkResults:
@@ -82,6 +83,36 @@ class BenchmarkResults:
         with open(path, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
         print(f"Saved to {path}")
+
+    def save_csv(self, path: str, append: bool = True):
+        """Save results to CSV, optionally appending to existing file.
+
+        Args:
+            path: Path to CSV file
+            append: If True, append to existing file; if False, overwrite
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Convert results to DataFrame
+        if self.results:
+            rows = []
+            for r in self.results:
+                row = asdict(r)
+                row.pop('results', None)
+                rows.append(row)
+            df = pd.DataFrame(rows)
+        else:
+            row = asdict(self)
+            row.pop('results', None)
+            df = pd.DataFrame([row])
+
+        if append and path.exists():
+            df.to_csv(path, mode='a', header=False, index=False)
+        else:
+            df.to_csv(path, index=False)
+
+        print(f"Saved {len(df)} result(s) to {path}")
 
     @classmethod
     def load(cls, path: str) -> BenchmarkResults:
