@@ -51,7 +51,7 @@ def run_benchmark(
 
         for n_workers in worker_counts:
             for batch_sz in batch_size:
-                output_zarr = Path(output_dir) / f"{scenario_name}_w{n_workers}_b{batch_sz}.zarr"
+                output_zarr = Path(output_dir) / "benchmark_output.zarr"
 
                 # Remove output if exists
                 if output_zarr.exists():
@@ -77,8 +77,8 @@ def run_benchmark(
                     print(f"Failed with {n_workers} workers and batch_size {batch_sz}: {e}")
 
                 # Cleanup output
-                # if output_zarr.exists():
-                    # shutil.rmtree(output_zarr)
+                if output_zarr.exists():
+                    shutil.rmtree(output_zarr)
 
     return benchmark_results
 
