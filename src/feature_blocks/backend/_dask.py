@@ -120,7 +120,7 @@ def run_dask_backend(
             progress(futures, notebook=False)
 
         # Just ensure all tasks are finished (and handle errors)
-        wait(futures, timeout="30 minutes")
+        wait(futures)
 
         failed = [f for f in futures if f.status == "error"]
         if failed:
