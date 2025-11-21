@@ -107,24 +107,26 @@ def run_dask_backend(
         log.warning("visualise_graph is not supported with client.map() workflow")
 
     client = Client(cluster, direct_to_workers=True)
+    futures = []
 
-    if function_kwargs is None:
-        function_kwargs = {}
+    try:
+        if function_kwargs is None:
+            function_kwargs = {}
 
-    log.info(f"Mapping {function.__name__} over {len(regions)} regions with batch_size={batch_size}...")
+        log.info(f"Mapping {function.__name__} over {len(regions)} regions with batch_size={batch_size}...")
 
-    with performance_report(filename="performance_report.html"):
-        futures = client.map(function, regions, pure=True, batch_size=batch_size, **function_kwargs)
-        progress(futures, notebook=False)
+        with performance_report(filename="performance_report.html"):
+            futures = client.map(function, regions, pure=True, batch_size=batch_size, **function_kwargs)
+            progress(futures, notebook=False)
 
-    # Just ensure all tasks are finished (and handle errors)
-    wait(futures, timeout=1)
+        # Just ensure all tasks are finished (and handle errors)
+        wait(futures, timeout="30 minutes")
 
-    failed = [f for f in futures if f.status == "error"]
-    if failed:
-        print(f"{len(failed)} tasks failed.")
-
-    # Silence cluster shutdown
-    with silence_logging_cmgr(logging.CRITICAL):
-        client.cancel(futures)
-        client.shutdown()
+        failed = [f for f in futures if f.status == "error"]
+        if failed:
+            print(f"{len(failed)} tasks failed.")
+    finally:
+        # Silence cluster shutdown
+        with silence_logging_cmgr(logging.CRITICAL):
+            client.cancel(futures)
+            client.shutdown()
