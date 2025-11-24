@@ -143,19 +143,19 @@ def run_cpu_gpu_benchmark(
 
 
 if __name__ == "__main__":
-    OUTPUT_DIR = "data/benchmarking"
+    OUTPUT_DIR = "benchmarking_results"
 
     results = run_cpu_gpu_benchmark(
         model_name="tiny_vit",
-        block_size=224,
-        shard_size=224,
-        image_size=(
-            (3, 1, 1024, 1024),
-            (3, 1, 8_000, 8_000),
-        ),
-        n_workers=4,
+        block_size=200,
+        shard_size=200,
+        image_size=[
+            # (3, 1, 1024, 1024)
+            (3, 1, 32768, 32768)
+            ],
+        n_workers=200,
         gpu_batch_size=32,
-        cpu_batch_size=1,
+        cpu_batch_size=4,
         device="cuda",
         output_dir=OUTPUT_DIR,
         csv_path=f"{OUTPUT_DIR}/cpu_vs_gpu_results.csv",
