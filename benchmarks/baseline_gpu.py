@@ -6,6 +6,8 @@ import shutil
 from typing import List, Tuple, Optional, Callable
 from pathlib import Path
 import geopandas as gpd
+from ome_zarr.io import parse_url
+from feature_blocks.io import save_ome_zarr
 
 from utils import MemoryTracker, BenchmarkResults, estimate_n_chunks
 
@@ -82,7 +84,9 @@ class GPUBatchInference:
             mem_tracker = MemoryTracker()
 
         # Load zarr
-        z = zarr.open(zarr_path, mode="r")[0]
+        store = parse_url(zarr_path, mode="r").store
+        root = zarr.open_group(store=store, mode="r")
+        z = root["0"]
         C, Z, H, W = z.shape
 
         # Generate block indices
@@ -186,19 +190,13 @@ class GPUBatchInference:
             if Path(output_zarr_path).exists():
                 shutil.rmtree(output_zarr_path)
 
-            # Create zarr store with compression (matching dask method)
-            compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
-
-            # Create zarr array and write features
-            z_out = zarr.open(
-                output_zarr_path,
-                mode="w",
-                shape=features.shape,
-                chunks=features.shape,  # Single chunk write
-                dtype=np.float32,
-                compressor=compressor,
+            save_ome_zarr(
+                array=features,
+                output_path=output_zarr_path,
+                chunks=features.shape,
+                axes="czyx",
+                compression="zstd",
             )
-            z_out[:] = features
 
             timing["write_time"] = time.time() - write_start
             print(f"  Write: {timing['write_time']:.2f}s")
