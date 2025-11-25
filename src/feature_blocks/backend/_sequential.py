@@ -199,8 +199,8 @@ class SequentialProcessor:
         self._load_model()
 
         # Open zarr stores
-        input_data = zarr.open(input_zarr_path, mode="r")[0]
-        output_data = zarr.open(output_zarr_path, mode="r+")[0]
+        input_data = zarr.open(input_zarr_path, mode="r")["0"]
+        output_data = zarr.open(output_zarr_path, mode="r+")["0"]
 
         # Process in batches
         batch_tensors = []
