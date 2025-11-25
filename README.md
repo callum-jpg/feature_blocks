@@ -1,38 +1,28 @@
 # Feature Blocks
 
-Extract and cluster features from image blocks using state-of-the-art machine learning models.
+Extract features efficiently from OME-Zarr images using deep learning models, CellProfiler, or any other feature extraction method. If it returns a 1D feature vector, it can be easily implemented.
 
-## Overview
-
-Feature Blocks is a Python package designed for extracting features from image blocks using various pre-trained models including UNI, PhiKon, DINOv2, and others. It's particularly useful for analyzing large microscopy images, histopathology slides, and other high-resolution scientific imagery.
+`feature_blocks` was designed with Dask in mind for distribution, but it also contains methods for GPU-inference if the feature extractor can be GPU accelerated. 
 
 ## Features
 
-- **Multiple Model Support**: UNI, PhiKon, DINOv2, GigaPath, and custom models
-- **Flexible Block Processing**: Extract features from image blocks or segmentation centroids
+- **Adaptable feature extractor**: UNI, PhiKon, DINOv2, GigaPath, and custom models
+- **Flexible Block Processing**: Extract features from image blocks or from crops centered on segmentation centroids
 - **Distributed Computing**: Built-in support for SLURM, LSF and distributed processing
 - **Multiple File Formats**: Support for OME-TIFF, Zarr, and SpatialData formats
 - **Configurable Pipeline**: TOML-based configuration for reproducible workflows
-
-## Installation
-
-### Prerequisites
-
-- Python ≥ 3.11
-- PyTorch (CPU or GPU version)
-
 
 ### Installation
 
 ```bash
 git clone https://github.com/callum-jpg/feature_blocks.git
 cd feature_blocks
-pip install -e ".[dev,test]"
+uv pip install -e ".[dev,test]"
 ```
 
 ## Quick Start
 
-### 1. Create a Configuration File
+### Create a Configuration File
 
 ```toml
 # config.toml
@@ -47,13 +37,21 @@ n_workers = 4
 memory = "16GB"
 ```
 
-### 2. Run Feature Extraction (CLI)
+If you have a SpatialData object, you can also load images and segmentations directly by using the `::` accessor, like so:
+```toml
+# config.toml
+image_path = "path/to/your/spatialdata_object.zarr::image_name"
+segmentations = "path/to/your/spatialdata_object.zarr::segmentation_shapes_name"
+...
+```
+
+### Run Feature Extraction (CLI)
 
 ```bash
 feature_blocks extract config.toml
 ```
 
-### 3. Use in Python
+### Use in Python
 
 ```python
 from feature_blocks.features import extract
@@ -80,59 +78,24 @@ features = extract(
 - **Conv**: Simple convolutional baseline
 - **LBP**: Local Binary Pattern features
 - **Dummy**: Random features for testing
+- **CellProfiler**: Extract CellProfiler features using `cp_measure`. Requires `block_method='centroid'`.
 
 ### Distributed Computing
 
 ```toml
 # For SLURM/LSF environments
 n_workers = 10
-python_path = "singularity exec container.simg python"
+python_path = "singularity exec container.simg python" # Define the python path (eg. from a singularity container)
 memory = "32GB"  # Configurable memory per worker
 ```
-
-### Custom Models
-
-```python
-from feature_blocks.models import BaseModel
-import torch.nn as nn
-
-class CustomModel(BaseModel):
-    def __init__(self):
-        super().__init__()
-        self.n_features = 512
-        self.output_shape = (512, 1, 1, 1)
-        
-    def forward(self, x):
-        # Your custom feature extraction logic
-        return features
-```
-
-## API Reference
-
-### CLI Commands
-
-- `feature_blocks extract <config_file>` - Run feature extraction pipeline
-
-### Python API
-
-#### Models
-- `UNI()`
-- `PhiKon()`
-- `DINOv2()` 
-- `GigaPathTile()`
-- `GigaPathTilePatch()`
 
 ## Examples
 
 See the `examples/` directory for complete workflows
 
-## License
-
-This project is licensed under the MIT License - see [LICENSE.txt](LICENSE.txt) for details.
-
 ## Benchmarking
 
 Run benchmarking with:
 ```bash
-uv run --extra cu128 python benchmarks/cpu_vs_gpu_benchmark.py
+uv run python benchmarks/benchmark.py
 ```
