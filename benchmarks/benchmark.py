@@ -22,7 +22,7 @@ def run_benchmark(
     segmentations_path: Optional[str] = None,
     shard_size: Tuple[int] | int = None,
     n_regions=None,
-    backend: str = "local",
+    backend: str = "dask",
     track_memory: bool = True,
     batch_size: Tuple[int] | int = 1,
     csv_path: Optional[str] = None,
@@ -69,7 +69,7 @@ def run_benchmark(
                         image_size=image_size,
                         block_method="block",
                         batch_size=batch_sz,
-                        # backend="local"
+                        backend=backend,
                     )
 
                     benchmark_results.add_result(result)
@@ -98,7 +98,7 @@ def benchmark_extract(
     shard_size: int = None,
     block_method: str = "block",
     segmentations_path: Optional[str] = None,
-    backend: str = "local",
+    backend: str = "dask",
     track_memory: bool = True,
     batch_size: int = 1,
 ) -> BenchmarkResults:
@@ -114,7 +114,7 @@ def benchmark_extract(
         image_size: Image dimensions (C, Z, H, W)
         block_method: "block" or "centroid"
         segmentations_path: Path to segmentations GeoJSON (for centroid method)
-        backend: Dask backend ("local", "slurm", etc.)
+        backend: Dask backend ("dask" or "sequential")
         track_memory: Whether to track memory usage
         batch_size: Number of regions to process per task (default: 1)
 
@@ -150,7 +150,7 @@ def benchmark_extract(
             block_method=block_method,
             segmentations=segmentations_path,
             batch_size=batch_size,
-            # backend=backend
+            backend=backend
         )
 
         total_time = time.time() - start_time
