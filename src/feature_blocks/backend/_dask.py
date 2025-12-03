@@ -37,7 +37,7 @@ def run_dask_backend(
     regions: list,
     visualise_graph: bool = False,
     n_workers: int | None = None,
-    python_path: str = "python",
+    python_path: str = None,
     memory: str = "16GB",
     batch_size: int = 1,
     model_identifier: str | None = None,
@@ -57,7 +57,7 @@ def run_dask_backend(
 
         cluster = SLURMCluster(
             n_workers=n_workers,
-            cores=2,
+            cores=1,
             memory=memory,
             walltime="08:00:00",
             log_directory="logs",
