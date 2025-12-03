@@ -34,7 +34,7 @@ def extract(
     device: str = "auto",
     batch_size: int = 1,
     n_workers: int | None = None,
-    python_path: str = "python",
+    python_path: str = None,
     memory: str = "16GB",
     block_method: list["block", "centroid"] = "block",
     segmentations: typing.Optional["geopandas.GeoDataFrame"] = None,
