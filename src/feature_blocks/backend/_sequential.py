@@ -188,6 +188,7 @@ class SequentialProcessor:
         output_zarr_path: str,
         regions: list,
         block_size: int,
+        chunk_size: int,
         output_chunks: tuple,
     ):
         """
@@ -197,7 +198,8 @@ class SequentialProcessor:
             input_zarr_path: Path to input zarr
             output_zarr_path: Path to output zarr
             regions: List of region tuples (slices)
-            block_size: Size of blocks
+            block_size: Size of blocks for processing
+            chunk_size: Size of input zarr chunks
             output_chunks: Output chunk shape
         """
         self._load_model()
@@ -224,7 +226,7 @@ class SequentialProcessor:
 
                 # Write results
                 self._write_block_features(
-                    output_data, features, batch_regions, block_size, output_chunks
+                    output_data, features, batch_regions, chunk_size, output_chunks
                 )
 
                 # Clear batch
@@ -235,7 +237,7 @@ class SequentialProcessor:
         if batch_tensors:
             features = self._infer_batch(batch_tensors)
             self._write_block_features(
-                output_data, features, batch_regions, block_size, output_chunks
+                output_data, features, batch_regions, chunk_size, output_chunks
             )
 
         log.info("Block processing complete")
@@ -245,7 +247,7 @@ class SequentialProcessor:
         output_data,
         features: numpy.ndarray,
         batch_regions: list,
-        block_size: int,
+        chunk_size: int,
         output_chunks: tuple,
     ):
         """Write block features to output zarr."""
@@ -257,8 +259,9 @@ class SequentialProcessor:
                 slice(0, self.n_features, None),
                 slice(0, 1, None),
             ]
-            chunk_size = block_size // output_chunks[2]
-            output_region.extend(normalize_slices(region[-2:], chunk_size))
+            # Calculate output position based on input chunk_size and output downsampling
+            output_step = chunk_size // output_chunks[2]
+            output_region.extend(normalize_slices(region[-2:], output_step))
 
             # Write features
             output_data[tuple(output_region)] = features[i].reshape(self.n_features, 1, 1, 1)
@@ -334,6 +337,7 @@ def run_sequential_backend(
     device: str = "auto",
     batch_size: int = 32,
     mask_store_path: Optional[str] = None,
+    chunk_size: int | None = None,
 ):
     """
     Run feature extraction using sequential backend.
@@ -347,12 +351,16 @@ def run_sequential_backend(
         input_zarr_path: Path to input zarr
         output_zarr_path: Path to output zarr
         block_method: "block" or "centroid"
-        block_size: Size of blocks/regions
+        block_size: Size of blocks/regions for processing
         output_chunks: Output chunk shape
         device: "auto", "cuda", or "cpu"
         batch_size: Number of regions to batch for inference
         mask_store_path: Optional path to mask store
+        chunk_size: Size of input zarr chunks (defaults to block_size if None)
     """
+    # Default chunk_size to block_size for backward compatibility
+    if chunk_size is None:
+        chunk_size = block_size
     start_time = time.time()
 
     # Create processor
@@ -369,6 +377,7 @@ def run_sequential_backend(
             output_zarr_path=output_zarr_path,
             regions=regions,
             block_size=block_size,
+            chunk_size=chunk_size,
             output_chunks=output_chunks,
         )
     elif block_method == "centroid":

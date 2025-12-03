@@ -175,6 +175,7 @@ def create_test_scenario(
     n_regions: Optional[int] = None,
     base_dir: Optional[str] = None,
     seed: int = 42,
+    chunk_size: int = None,
 ) -> dict:
     """
     Create a complete test scenario with image and segmentations.
@@ -182,9 +183,12 @@ def create_test_scenario(
     Args:
         name: Scenario name
         image_size: (C, Z, H, W) dimensions
+        block_size: Size of blocks for processing
+        shard_size: Size of shards for zarr
         n_regions: Number of regions (if None, estimated from image size)
         base_dir: Base directory (if None, uses temp directory)
         seed: Random seed
+        chunk_size: Size of zarr chunks (defaults to block_size if None)
 
     Returns:
         Dictionary with paths to created files
@@ -192,7 +196,11 @@ def create_test_scenario(
     base_dir = Path(base_dir) / name
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    chunk_size = (image_size[0], image_size[1], block_size, block_size)
+    # Default chunk_size to block_size if not specified
+    if chunk_size is None:
+        chunk_size = block_size
+
+    chunk_size_tuple = (image_size[0], image_size[1], chunk_size, chunk_size)
 
     if shard_size is not None:
         shard_size_tuple = (image_size[0], image_size[1], shard_size, shard_size)
@@ -207,7 +215,7 @@ def create_test_scenario(
         str(image_path),
         image_size=image_size,
         pattern="random",
-        chunk_size=chunk_size,
+        chunk_size=chunk_size_tuple,
         shard_size=shard_size_tuple,
         seed=seed,
     )
@@ -230,6 +238,7 @@ def create_test_scenario(
         "image_size": image_size,
         "n_regions": n_regions,
         "block_size": block_size,
+        "chunk_size": chunk_size,
         "shard_size": shard_size,
         "base_dir": str(base_dir),
     }
@@ -243,11 +252,20 @@ def create_scenarios(
     base_dir: str,
     shard_size: Union[Tuple[int], int]  = None,
     n_regions: Union[Tuple[int], int] = None,
+    chunk_size: Union[Tuple[int], int] = None,
 ) -> List[dict]:
     """
     Create a suite of test scenarios for scaling benchmarks.
 
     Generates images of increasing size to test zarr+dask scaling behavior.
+
+    Args:
+        block_size: Size(s) of blocks for processing
+        image_size: Image size(s) to create
+        base_dir: Base directory for scenarios
+        shard_size: Shard size(s) for zarr
+        n_regions: Number(s) of regions for segmentations
+        chunk_size: Chunk size(s) for zarr (defaults to block_size if None)
 
     Returns:
         List of scenario dictionaries
@@ -260,6 +278,9 @@ def create_scenarios(
     if isinstance(shard_size, int) or shard_size is None:
         shard_size = [shard_size]
 
+    if isinstance(chunk_size, int) or chunk_size is None:
+        chunk_size = [chunk_size]
+
     if not all(isinstance(i_s, tuple) for i_s in image_size):
         image_size = image_size
 
@@ -267,25 +288,30 @@ def create_scenarios(
         n_regions = [n_regions]
 
     for blk_sz in block_size:
-        for shd_sz in shard_size:
-            for img_sz in image_size:
-                for n_reg in n_regions:
+        for chk_sz in chunk_size:
+            for shd_sz in shard_size:
+                for img_sz in image_size:
+                    for n_reg in n_regions:
 
-                    scenario_name = f"image_size_{img_sz[-1]}_block_size_{blk_sz}"
-                    
-                    if shd_sz is not None:
-                        scenario_name += f"_shard_size_{shd_sz}"
+                        scenario_name = f"image_size_{img_sz[-1]}_block_size_{blk_sz}"
 
-                    scenarios.append(
-                        create_test_scenario(
-                            name=scenario_name,
-                            base_dir=base_dir,
-                            image_size=img_sz,
-                            block_size=blk_sz,
-                            shard_size=shd_sz,
-                            n_regions=n_reg,
+                        if chk_sz is not None and chk_sz != blk_sz:
+                            scenario_name += f"_chunk_size_{chk_sz}"
+
+                        if shd_sz is not None:
+                            scenario_name += f"_shard_size_{shd_sz}"
+
+                        scenarios.append(
+                            create_test_scenario(
+                                name=scenario_name,
+                                base_dir=base_dir,
+                                image_size=img_sz,
+                                block_size=blk_sz,
+                                chunk_size=chk_sz,
+                                shard_size=shd_sz,
+                                n_regions=n_reg,
+                            )
                         )
-                    )
 
     print(f"\nCreated {len(scenarios)} test scenarios")
     return scenarios

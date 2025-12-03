@@ -19,6 +19,7 @@ def process_region(
     block_size,
     output_chunks,
     mask_store_path=None,
+    chunk_size=None,
 ):
     """Process a complete region: read -> infer -> write
 
@@ -28,13 +29,17 @@ def process_region(
         model_identifier: String model name (serialization-friendly) or callable
         n_features: Number of features the model produces
         output_zarr_path: Path to output zarr
-        block_size: Size of blocks
+        block_size: Size of blocks for processing
         output_chunks: Output chunk shape
         mask_store_path: Path to zarr store containing mask data (for CellProfiler)
+        chunk_size: Size of input zarr chunks (defaults to block_size if None)
 
     Returns:
         None (writes directly to zarr)
     """
+    # Default chunk_size to block_size for backward compatibility
+    if chunk_size is None:
+        chunk_size = block_size
     if len(reg) == 3:
         # CellProfiler method with mask index (centroid + mask)
         chunk_id, chunk_slices, mask_index = reg
@@ -54,8 +59,9 @@ def process_region(
             slice(0, n_features, None),
             slice(0, 1, None),
         ]
-        chunk_size = block_size // output_chunks[2]
-        output_region.extend(normalize_slices(reg[-2:], chunk_size))
+        # Calculate output position based on input chunk_size and output downsampling
+        output_step = chunk_size // output_chunks[2]
+        output_region.extend(normalize_slices(reg[-2:], output_step))
     else:
         raise ValueError(
             f"Region is of length {len(reg)} rather than the expected 2, 3, or 4. Region: {reg}"

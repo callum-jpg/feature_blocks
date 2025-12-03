@@ -39,9 +39,11 @@ class BenchmarkResults:
     image_size: Optional[Tuple[int, int]] = None
     n_chunks: Optional[int] = None
     block_size: Optional[int] = None
+    chunk_size: Optional[int] = None
     shard_size: Optional[int] = None
     n_workers: Optional[int] = None
     batch_size: Optional[int] = None
+    backend: Optional[str] = None  # e.g. "dask", "sequential"
     model_name: Optional[str] = None
     method: Optional[str] = None  # e.g. "zarr_dask", "gpu_batch", "in_memory"
 

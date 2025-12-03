@@ -42,7 +42,12 @@ def extract(
     mask_downsample: int = 1,
     masked_block_value=numpy.nan,
     masking_kwargs: typing.Dict[str, int] = None,
+    chunk_size: int | None = None,
 ):
+
+    # Default chunk_size to block_size if not specified
+    if chunk_size is None:
+        chunk_size = block_size
 
     # component=0 to read the high resolution image
     # We mostly load input_data here to get it's shape. If required,
@@ -267,6 +272,7 @@ def extract(
                 "n_features": feature_extract_fn.n_features,
                 "output_zarr_path": output_zarr_path,
                 "block_size": block_size,
+                "chunk_size": chunk_size,
                 "output_chunks": output_chunks,
                 "mask_store_path": mask_store_path,
             },
@@ -283,6 +289,7 @@ def extract(
             output_zarr_path=output_zarr_path,
             block_method=block_method,
             block_size=block_size,
+            chunk_size=chunk_size,
             output_chunks=output_chunks,
             device=device,
             batch_size=batch_size,

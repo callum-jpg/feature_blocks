@@ -21,17 +21,40 @@ def run_benchmark(
     block_method: str = "block",
     segmentations_path: Optional[str] = None,
     shard_size: Tuple[int] | int = None,
+    chunk_size: Tuple[int] | int = None,
     n_regions=None,
-    backend: str = "dask",
+    backend: Tuple[str] | str = "dask",
     track_memory: bool = True,
     batch_size: Tuple[int] | int = 1,
     csv_path: Optional[str] = None,
 ) -> BenchmarkResults:
+    """
+    Run benchmarks across multiple scenarios and settings.
 
+    Args:
+        model_name: Feature extraction model to use
+        block_size: Block size(s) to test
+        worker_counts: Number(s) of workers to test
+        image_size: Image size(s) to test
+        output_dir: Directory for temporary output files
+        block_method: "block" or "centroid"
+        segmentations_path: Path to segmentations (for centroid method)
+        shard_size: Shard size(s) for zarr
+        chunk_size: Chunk size(s) for zarr (defaults to block_size if None)
+        n_regions: Number of regions (for synthetic data)
+        backend: Backend(s) to test - "dask", "sequential", or list of both
+        track_memory: Whether to track memory usage
+        batch_size: Batch size(s) to test
+        csv_path: Path to save incremental CSV results
+
+    Returns:
+        BenchmarkResults with all results
+    """
     scenarios = create_scenarios(
         base_dir="./data/benchmarking",
         block_size=block_size,
         shard_size=shard_size,
+        chunk_size=chunk_size,
         image_size=image_size,
     )
 
@@ -41,6 +64,9 @@ def run_benchmark(
     if isinstance(batch_size, int):
         batch_size = [batch_size]
 
+    if isinstance(backend, str):
+        backend = [backend]
+
     benchmark_results = BenchmarkResults()
 
     for scenario in scenarios:
@@ -48,42 +74,45 @@ def run_benchmark(
         input_zarr = os.path.abspath(scenario["image_path"])
         image_size = scenario["image_size"]
         blk_size = scenario["block_size"]
+        chk_size = scenario["chunk_size"]
         shrd_size = scenario["shard_size"]
 
-        for n_workers in worker_counts:
-            for batch_sz in batch_size:
-                output_zarr = Path(output_dir) / "benchmark_output.zarr"
+        for bkend in backend:
+            for n_workers in worker_counts:
+                for batch_sz in batch_size:
+                    output_zarr = Path(output_dir) / "benchmark_output.zarr"
 
-                # Remove output if exists
-                if output_zarr.exists():
-                    shutil.rmtree(output_zarr)
+                    # Remove output if exists
+                    if output_zarr.exists():
+                        shutil.rmtree(output_zarr)
 
-                try:
-                    result = benchmark_extract(
-                        input_zarr_path=input_zarr,
-                        output_zarr_path=str(output_zarr),
-                        model_name=model_name,
-                        block_size=blk_size,
-                        shard_size=shrd_size,
-                        n_workers=n_workers,
-                        image_size=image_size,
-                        block_method="block",
-                        batch_size=batch_sz,
-                        backend=backend,
-                    )
+                    try:
+                        result = benchmark_extract(
+                            input_zarr_path=input_zarr,
+                            output_zarr_path=str(output_zarr),
+                            model_name=model_name,
+                            block_size=blk_size,
+                            chunk_size=chk_size,
+                            shard_size=shrd_size,
+                            n_workers=n_workers,
+                            image_size=image_size,
+                            block_method="block",
+                            batch_size=batch_sz,
+                            backend=bkend,
+                        )
 
-                    benchmark_results.add_result(result)
+                        benchmark_results.add_result(result)
 
-                    # Incrementally save to CSV
-                    if csv_path:
-                        result.save_csv(csv_path, append=True)
+                        # Incrementally save to CSV
+                        if csv_path:
+                            result.save_csv(csv_path, append=True)
 
-                except Exception as e:
-                    print(f"Failed with {n_workers} workers and batch_size {batch_sz}: {e}")
+                    except Exception as e:
+                        print(f"Failed with backend={bkend}, {n_workers} workers, batch_size={batch_sz}: {e}")
 
-                # Cleanup output
-                if output_zarr.exists():
-                    shutil.rmtree(output_zarr)
+                    # Cleanup output
+                    if output_zarr.exists():
+                        shutil.rmtree(output_zarr)
 
     return benchmark_results
 
@@ -96,6 +125,7 @@ def benchmark_extract(
     n_workers: int,
     image_size: Tuple[int, int, int, int],
     shard_size: int = None,
+    chunk_size: int = None,
     block_method: str = "block",
     segmentations_path: Optional[str] = None,
     backend: str = "dask",
@@ -112,6 +142,8 @@ def benchmark_extract(
         block_size: Size of processing blocks
         n_workers: Number of dask workers
         image_size: Image dimensions (C, Z, H, W)
+        shard_size: Size of shards for zarr
+        chunk_size: Size of zarr chunks (defaults to block_size if None)
         block_method: "block" or "centroid"
         segmentations_path: Path to segmentations GeoJSON (for centroid method)
         backend: Dask backend ("dask" or "sequential")
@@ -131,6 +163,7 @@ def benchmark_extract(
     print(f"  Model: {model_name}")
     print(f"  Image size: {image_size}")
     print(f"  Block size: {block_size}")
+    print(f"  Chunk size: {chunk_size if chunk_size else block_size}")
     print(f"  Shard size: {shard_size}")
     print(f"  Block method: {block_method}")
     print(f"  Workers: {n_workers}")
@@ -145,6 +178,7 @@ def benchmark_extract(
             input_zarr_path=input_zarr_path,
             feature_extraction_method=model_name,
             block_size=block_size,
+            chunk_size=chunk_size,
             output_zarr_path=output_zarr_path,
             n_workers=n_workers,
             block_method=block_method,
@@ -172,15 +206,17 @@ def benchmark_extract(
         n_features = get_model(model_name).n_features
 
         result = BenchmarkResults(
-            name=f"zarr_dask_{model_name}",
+            name=f"{backend}_{model_name}",
             image_size=image_size,
             n_chunks=n_chunks,
             block_size=block_size,
+            chunk_size=chunk_size if chunk_size else block_size,
             shard_size=shard_size,
             n_workers=n_workers,
             batch_size=batch_size,
+            backend=backend,
             model_name=model_name,
-            method="zarr_dask",
+            method=backend,
             total_time=total_time,
             inference_time=total_time,  # Approximation
             io_time=None,
@@ -222,12 +258,14 @@ if __name__ == "__main__":
         # worker_counts=[1, 2, 4],
         worker_counts=[1],
         image_size=image_sizes,
-        batch_size=[1], 
+        batch_size=[1],
+        backend=["dask", "sequential"],  # Test all backends
         block_method="block",
         segmentations_path=None,
         n_regions=None,
         track_memory=False,
         output_dir=OUTPUT_DIR,
+        csv_path=f"{OUTPUT_DIR}/benchmark_results.csv",
     )
 
     # Save results

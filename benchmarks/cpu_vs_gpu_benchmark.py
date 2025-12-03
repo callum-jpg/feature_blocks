@@ -28,6 +28,7 @@ def run_cpu_gpu_benchmark(
     device: str = "cuda",
     csv_path: Optional[str] = None,
     shard_size: Tuple[int] | int = None,
+    chunk_size: Tuple[int] | int = None,
 ) -> BenchmarkResults:
     """
     Run CPU vs GPU comparison benchmark.
@@ -43,6 +44,7 @@ def run_cpu_gpu_benchmark(
         device: "cuda" or "cpu" for GPU baseline
         csv_path: Path to save incremental CSV results
         shard_size: Shard size(s) for zarr
+        chunk_size: Chunk size(s) for zarr (defaults to block_size if None)
 
     Returns:
         BenchmarkResults with all CPU and GPU results
@@ -51,6 +53,7 @@ def run_cpu_gpu_benchmark(
         base_dir="./data/benchmarking",
         block_size=block_size,
         shard_size=shard_size,
+        chunk_size=chunk_size,
         image_size=image_size,
     )
 
@@ -61,6 +64,7 @@ def run_cpu_gpu_benchmark(
         input_zarr = os.path.abspath(scenario["image_path"])
         image_size = scenario["image_size"]
         blk_size = scenario["block_size"]
+        chk_size = scenario["chunk_size"]
         shrd_size = scenario["shard_size"]
 
         print(f"\n{'='*60}")
@@ -115,6 +119,7 @@ def run_cpu_gpu_benchmark(
                 output_zarr_path=str(output_zarr),
                 model_name=model_name,
                 block_size=blk_size,
+                chunk_size=chk_size,
                 shard_size=shrd_size,
                 n_workers=n_workers,
                 image_size=image_size,
