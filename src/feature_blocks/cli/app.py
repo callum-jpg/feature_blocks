@@ -37,7 +37,6 @@ def extract(config_file: str):
         segmentations=segmentations,
         block_method=config.get("block_method", "block"),
         block_size=config.get("block_size"),
-        shard_size=config.get("shard_size", None),
         output_zarr_path=config.get("save_path"),
         n_workers=config.get("n_workers", 1),
         python_path=config.get("python_path", "python"),
@@ -62,6 +61,8 @@ def load_and_process_image(config: dict) -> Path:
     Returns the path to the processed zarr file.
     """
     input_path = Path(config["image_path"])
+
+    shard_size = config.get("shard_size", None)
 
     if input_path.suffix == ".zarr":
         # Image is already in zarr format
