@@ -175,8 +175,12 @@ class SequentialProcessor:
         with torch.no_grad():
             features = self.model(batch)
 
-        # Convert to numpy and return
-        return features.cpu().numpy()
+        if isinstance(features, numpy.ndarray):
+            # CPU-based methods do not return tensors
+            return features
+        else:
+            # Convert to numpy and return
+            return features.cpu().numpy()
 
     def process_blocks(
         self,
