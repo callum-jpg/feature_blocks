@@ -24,6 +24,7 @@ def run_benchmark(
     chunk_size: Tuple[int] | int = None,
     n_regions=None,
     backend: Tuple[str] | str = "dask",
+    python_path: str = None,
     track_memory: bool = True,
     batch_size: Tuple[int] | int = 1,
     csv_path: Optional[str] = None,
@@ -131,6 +132,7 @@ def benchmark_extract(
     backend: str = "dask",
     track_memory: bool = True,
     batch_size: int = 1,
+    python_path: str = None,
 ) -> BenchmarkResults:
     """
     Benchmark feature_blocks extraction with zarr+dask.
@@ -184,7 +186,8 @@ def benchmark_extract(
             block_method=block_method,
             segmentations=segmentations_path,
             batch_size=batch_size,
-            backend=backend
+            backend=backend,
+            python_path=python_path,
         )
 
         total_time = time.time() - start_time
@@ -240,33 +243,60 @@ def benchmark_extract(
 if __name__ == "__main__":
     print("Running scaling analysis...")
 
-    OUTPUT_DIR = "data/benchmarking2"
+    OUTPUT_DIR = "data/benchmarking"
 
-    base_img = (3, 1, 256, 256)
-    LEVELS = 1
+    # base_img = (3, 1, 256, 256)
+    # LEVELS = 8
+
+    base_img = (3, 1, 32768, 32768)
+    LEVELS = 0
 
     image_sizes = [
         (base_img[0], base_img[1], base_img[2] * 2**i, base_img[3] * 2**i)
         for i in range(LEVELS + 1)
     ]
 
+    # results = run_benchmark(
+    #     model_name="dummy",
+    #     block_size=[200],
+    #     shard_size=[200, 1000, 2000],
+    #     # worker_counts=[1, 2, 4],
+    #     worker_counts=[50, 100, 200, 400, 600],
+    #     image_size=image_sizes,
+    #     batch_size=[1, 4, 8, 16], 
+    #     block_method="block",
+    #     segmentations_path=None,
+    #     n_regions=None,
+    #     track_memory=False,
+    #     output_dir=OUTPUT_DIR,
+    #     backend="sequential",
+    #     csv_path="benchmarking_results/image_benchmarking_SEQUENTIAL.csv"
+    # )
+
+    # # Save results
+    # results.save(f"benchmarking_results/image_benchmarking_SEQUENTIAL.json")
+
     results = run_benchmark(
         model_name="dummy",
-        block_size=[224],
-        # shard_size=[224, 448],
-        shard_size=[224],
-        # worker_counts=[1, 2, 4],
-        worker_counts=[1],
+        block_size=[200],
+        chunk_size=[200, 400],
+        # shard_size=[200, 1000, 2000],
+        shard_size=[200],
+        worker_counts=[200],
+        # worker_counts=[50, 100, 200, 400, 600],
         image_size=image_sizes,
-        batch_size=[1],
-        backend=["dask", "sequential"],  # Test all backends
+        # batch_size=[1, 4, 8, 16],
+        batch_size=[4], 
         block_method="block",
         segmentations_path=None,
         n_regions=None,
         track_memory=False,
         output_dir=OUTPUT_DIR,
-        csv_path=f"{OUTPUT_DIR}/benchmark_results.csv",
+        backend="dask",
+        # python_path="/nfs/research/uhlmann/callum/feature_blocks/.venv/bin/python",
+        csv_path="benchmarking_results/image_benchmarking_v3.csv"
     )
 
     # Save results
-    results.save(f"{OUTPUT_DIR}/image_size_scaling_benchmark_v6.json")
+    results.save(f"benchmarking_results/image_benchmarking_v3.json")
+

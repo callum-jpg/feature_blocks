@@ -231,7 +231,7 @@ def extract(
         )
         mask = mask[numpy.newaxis, numpy.newaxis]  # Add C an Z dimensions back
 
-        log.info(f"Before masking there was {len(regions)} possible regions")
+        log.info(f"Before masking there were {len(regions)} possible regions")
         regions, _background_slices = filter_slices_by_mask(regions, mask)
         log.info(f"After masking there were {len(regions)} regions inside the mask")
 
