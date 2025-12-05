@@ -49,6 +49,11 @@ cu128 = [
   "torch>=2.7.0",
   "torchvision>=0.22.0",
 ]
+benchmarking = [
+  "jupyterlab>=4.5.0",
+  "scanpy[leiden]",
+  "spatialdata_plot",
+]
 
 [tool.uv]
 conflicts = [
