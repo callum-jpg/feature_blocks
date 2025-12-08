@@ -15,7 +15,6 @@ from feature_blocks.image import tissue_detection
 from feature_blocks.models import available_models
 from feature_blocks.slice import (filter_slices_by_mask,
                                   generate_centroid_slices,
-                                  generate_centroid_slices_with_single_masks,
                                   generate_nd_slices, normalize_slices)
 from feature_blocks.io import save_ome_zarr
 from feature_blocks.task import process_region
@@ -137,56 +136,94 @@ def extract(
                 )
                 mask_store_path = None
             else:
-                # Mask mode: use mask data for each segmentation
+                # Mask mode: stream masks directly to zarr to avoid OOM
+                # This approach keeps only ONE mask in memory at a time
                 log.info(
-                    "CellProfiler in mask mode - generating masks for each segmentation"
-                )
-                regions_with_masks = generate_centroid_slices_with_single_masks(
-                    input_data.shape, size=block_size, segmentations=segmentations
+                    "CellProfiler in mask mode - streaming masks to zarr (memory-efficient)"
                 )
 
-                # Store masks in a temporary zarr to avoid embedding them in the Dask graph
+                from feature_blocks.utility._rasterize import rasterize_single_polygon
+
+                # First pass: gather slice info and find max dimensions
+                # We avoid storing mask arrays here - just metadata
+                regions = []
+                slice_info = []  # (centroid_id, slc, x_min, y_min, x_max, y_max, geometry)
+                max_h, max_w = 0, 0
+                half_size = block_size // 2
+
+                log.info("Pass 1: Computing slice bounds and max dimensions...")
+                for idx, row in enumerate(segmentations.itertuples()):
+                    # Get centroid ID
+                    centroid_id = row.Index
+
+                    # Calculate centroid and bounds
+                    y = round(row.geometry.centroid.y)
+                    x = round(row.geometry.centroid.x)
+
+                    y_min = max(0, y - half_size)
+                    y_max = min(input_data.shape[2], y + half_size)
+                    x_min = max(0, x - half_size)
+                    x_max = min(input_data.shape[3], x + half_size)
+
+                    slc = (
+                        slice(None),
+                        slice(None),
+                        slice(y_min, y_max),
+                        slice(x_min, x_max),
+                    )
+
+                    region_h = y_max - y_min
+                    region_w = x_max - x_min
+                    max_h = max(max_h, region_h)
+                    max_w = max(max_w, region_w)
+
+                    # Store metadata only (no mask data yet)
+                    slice_info.append(
+                        (centroid_id, slc, x_min, y_min, x_max, y_max, row.geometry)
+                    )
+                    regions.append((centroid_id, slc, idx))
+
+                # Create mask zarr store with known dimensions
                 mask_store_path = f"{output_zarr_path}_masks.zarr"
                 log.info(
-                    f"Storing {len(regions_with_masks)} masks to temporary zarr: {mask_store_path}"
+                    f"Creating mask store for {len(regions)} masks (max size: {max_h}x{max_w})"
                 )
 
-                # Extract mask data and create regions list without masks
-                regions = []
-                masks = []
-                for idx, (centroid_id, slc, mask_data) in enumerate(regions_with_masks):
-                    regions.append(
-                        (centroid_id, slc, idx)
-                    )  # Store index instead of mask_data
-                    masks.append(mask_data)
-
-                # Find max mask shape to create uniform zarr array
-                max_h = max(mask.shape[0] for mask in masks)
-                max_w = max(mask.shape[1] for mask in masks)
-
-                # Create mask zarr store
                 mask_store = zarr.create(
-                    shape=(len(masks), max_h, max_w),
+                    shape=(len(regions), max_h, max_w),
                     chunks=(1, max_h, max_w),
                     dtype=numpy.int32,
                     store=mask_store_path,
                     overwrite=True,
                     fill_value=0,
-                    # compressor=BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle"),
                 )
 
-                # Write all masks to zarr in parallel using numpy array operations
-                log.info("Writing masks to zarr in parallel...")
+                # Second pass: stream masks one at a time directly to zarr
+                log.info("Pass 2: Streaming masks to zarr...")
+                for idx, (
+                    centroid_id,
+                    slc,
+                    x_min,
+                    y_min,
+                    x_max,
+                    y_max,
+                    geom,
+                ) in enumerate(tqdm(slice_info, desc="Rasterizing masks")):
+                    region_bounds = (x_min, y_min, x_max, y_max)
+                    region_shape = (y_max - y_min, x_max - x_min)
 
-                # Stack all masks into a single array with padding
-                padded_masks = numpy.zeros((len(masks), max_h, max_w), dtype=numpy.int32)
-                for idx, mask_data in enumerate(masks):
+                    # Rasterize single polygon - only ONE mask in memory
+                    mask_data = rasterize_single_polygon(
+                        geom, region_bounds, region_shape, object_id=1
+                    )
+
+                    # Write immediately to zarr and release memory
                     h, w = mask_data.shape
-                    padded_masks[idx, :h, :w] = mask_data
+                    mask_store[idx, :h, :w] = mask_data
+                    # mask_data goes out of scope here, memory released
 
-                # Single write operation - much faster than individual writes
-                mask_store[:] = padded_masks
-
+                # Free the metadata list
+                del slice_info
                 log.info("Masks stored successfully")
         else:
             # Use the standard centroid slices without mask data
