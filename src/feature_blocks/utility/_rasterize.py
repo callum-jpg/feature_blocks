@@ -57,6 +57,41 @@ def rasterize_single_polygon(
     return mask
 
 
+def rasterize_batch(
+    batch_info: list[tuple],
+    max_h: int,
+    max_w: int,
+) -> numpy.ndarray:
+    """
+    Rasterize a batch of polygons in parallel for efficient zarr streaming.
+
+    Args:
+        batch_info: List of tuples (idx, centroid_id, slc, x_min, y_min, x_max, y_max, geometry)
+        max_h: Maximum height for mask array
+        max_w: Maximum width for mask array
+
+    Returns:
+        numpy.ndarray: Batch of rasterized masks with shape (batch_size, max_h, max_w)
+    """
+    batch_size = len(batch_info)
+    masks = numpy.zeros((batch_size, max_h, max_w), dtype=numpy.int32)
+
+    for i, (idx, centroid_id, slc, x_min, y_min, x_max, y_max, geom) in enumerate(
+        batch_info
+    ):
+        region_bounds = (x_min, y_min, x_max, y_max)
+        region_shape = (y_max - y_min, x_max - x_min)
+
+        # Rasterize single polygon
+        mask_data = rasterize_single_polygon(geom, region_bounds, region_shape, object_id=1)
+
+        # Copy to batch array
+        h, w = mask_data.shape
+        masks[i, :h, :w] = mask_data
+
+    return masks
+
+
 def slice_to_bounds(slice_obj: tuple, shape: tuple) -> tuple:
     """
     Convert a slice object to spatial bounds.

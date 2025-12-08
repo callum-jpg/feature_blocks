@@ -42,6 +42,7 @@ def extract(
     masked_block_value=numpy.nan,
     masking_kwargs: typing.Dict[str, int] = None,
     chunk_size: int | None = None,
+    mask_batch_size: int = 256,
 ):
 
     # Default chunk_size to block_size if not specified
@@ -142,7 +143,7 @@ def extract(
                     "CellProfiler in mask mode - streaming masks to zarr (memory-efficient)"
                 )
 
-                from feature_blocks.utility._rasterize import rasterize_single_polygon
+                from feature_blocks.utility._rasterize import rasterize_batch
 
                 # First pass: gather slice info and find max dimensions
                 # We avoid storing mask arrays here - just metadata
@@ -198,29 +199,32 @@ def extract(
                     fill_value=0,
                 )
 
-                # Second pass: stream masks one at a time directly to zarr
-                log.info("Pass 2: Streaming masks to zarr...")
-                for idx, (
-                    centroid_id,
-                    slc,
-                    x_min,
-                    y_min,
-                    x_max,
-                    y_max,
-                    geom,
-                ) in enumerate(tqdm(slice_info, desc="Rasterizing masks")):
-                    region_bounds = (x_min, y_min, x_max, y_max)
-                    region_shape = (y_max - y_min, x_max - x_min)
+                # Second pass: stream masks in batches to zarr
+                # Batching significantly reduces I/O overhead
+                n_batches = math.ceil(len(slice_info) / mask_batch_size)
+                log.info(
+                    f"Pass 2: Streaming masks to zarr in {n_batches} batches "
+                    f"(batch_size={mask_batch_size})..."
+                )
 
-                    # Rasterize single polygon - only ONE mask in memory
-                    mask_data = rasterize_single_polygon(
-                        geom, region_bounds, region_shape, object_id=1
-                    )
+                for batch_idx in tqdm(range(n_batches), desc="Rasterizing mask batches"):
+                    batch_start = batch_idx * mask_batch_size
+                    batch_end = min(batch_start + mask_batch_size, len(slice_info))
 
-                    # Write immediately to zarr and release memory
-                    h, w = mask_data.shape
-                    mask_store[idx, :h, :w] = mask_data
-                    # mask_data goes out of scope here, memory released
+                    # Prepare batch info with indices
+                    batch_info = [
+                        (idx, *slice_info[idx])
+                        for idx in range(batch_start, batch_end)
+                    ]
+
+                    # Rasterize entire batch
+                    batch_masks = rasterize_batch(batch_info, max_h, max_w)
+
+                    # Write entire batch to zarr in one operation
+                    mask_store[batch_start:batch_end, :, :] = batch_masks
+
+                    # Explicitly delete to free memory
+                    del batch_masks
 
                 # Free the metadata list
                 del slice_info
