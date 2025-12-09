@@ -154,13 +154,14 @@ if __name__ == "__main__":
         model_name="tiny_vit",
         block_size=200,
         shard_size=200,
+        chunk_size=800,
         image_size=[
             # (3, 1, 1024, 1024)
             (3, 1, 32768, 32768)
             ],
         n_workers=200,
         gpu_batch_size=32,
-        cpu_batch_size=4,
+        cpu_batch_size=16,
         device="cuda",
         output_dir=OUTPUT_DIR,
         csv_path=f"{OUTPUT_DIR}/cpu_vs_gpu_results.csv",
