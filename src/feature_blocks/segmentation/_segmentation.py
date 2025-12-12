@@ -38,9 +38,4 @@ def load_segmentations(config: dict):
             segmentation_scale_factor, segmentation_scale_factor, origin=(0, 0)
         )
 
-    # Scale segmentations according to image downsampling
-    segmentations.geometry = segmentations.scale(
-        xfact=1 / downsample_factor, yfact=1 / downsample_factor, origin=(0, 0)
-    )
-
     return segmentations
