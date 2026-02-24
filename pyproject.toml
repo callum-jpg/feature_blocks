@@ -29,8 +29,6 @@ dependencies = [
     "anndata>=0.12.0",
     "cp-measure>=0.1.13",
     "pycytominer>=1.4",
-    "torch>=2.7.0,<3",
-    "torchvision>=0.22.0,<1",
     "toml>=0.10",
     "matplotlib>=3.10",
 ]
@@ -39,6 +37,10 @@ dependencies = [
 feature_blocks = "feature_blocks.main:app"
 
 [project.optional-dependencies]
+cpu = [
+  "torch>=2.7.0,<3",
+  "torchvision>=0.22.0,<1",
+]
 cu128 = [
   "torch>=2.7.0,<3",
   "torchvision>=0.22.0,<1",
@@ -54,6 +56,12 @@ environments = [
   "sys_platform == 'linux'",
   "sys_platform == 'darwin'",
 ]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "cu128" },
+  ],
+]
 cache-keys = [
   { file = "pyproject.toml" }, 
   { file = "**/**.py.txt" }, # Ensure rebuilds are triggered upon code changes
@@ -62,12 +70,12 @@ cache-keys = [
 
 [tool.uv.sources]
 torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
   { index = "pytorch-cu128", extra = "cu128" },
-  { index = "pytorch-cpu" },
 ]
 torchvision = [
+  { index = "pytorch-cpu", extra = "cpu" },
   { index = "pytorch-cu128", extra = "cu128" },
-  { index = "pytorch-cpu" },
 ]
 
 [[tool.uv.index]]
